@@ -1,5 +1,6 @@
-import test, { before } from "node:test";
+import test, { before, after } from "node:test";
 import assert from "node:assert/strict";
+import { like } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { buildReport, reportToCsv } from "@/lib/reports";
 import { syncVariants } from "@/lib/catalog";
@@ -12,7 +13,10 @@ async function order(opts: { paidAt: string | null; status: any; total: number; 
   return o;
 }
 let prod: number, cat: number;
+const wipe = () => db.delete(schema.orders).where(like(schema.orders.number, "RPT-%")); // items cascade
+after(wipe);
 before(async () => {
+  await wipe(); // repeatable: never depend on rows left by an earlier run
   const [c] = await db.insert(schema.categories).values({ slug: `rc-${Date.now()}`, name: "Report Cat" }).returning(); cat = c.id;
   const [p] = await db.insert(schema.products).values({ slug: `rp-${Date.now()}`, name: "Report Shirt", priceKobo: 500000, categoryId: cat }).returning(); prod = p.id; await syncVariants(db, prod, [], [], 5);
   const a = await order({ paidAt: "2001-03-10T10:00:00Z", status: "PAID", total: 1000000 });
