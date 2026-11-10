@@ -3,13 +3,14 @@ import { db, schema } from "../src/db";
 import { DEFAULTS } from "../src/lib/settings";
 import { syncVariants, combos } from "../src/lib/catalog";
 import { eq } from "drizzle-orm";
+import { DEFAULT_GROUPS } from "../src/lib/menu";
 
 const cats = ["Perfumes", "Boxers", "Singlets", "Polo Shirts", "Jeans", "Other Fashion Items"];
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 const N = (n: number) => n * 100;
 
 async function main() {
-  for (const [i, name] of cats.entries()) await db.insert(schema.categories).values({ slug: slug(name), name, sort: i }).onConflictDoNothing();
+  for (const [i, name] of cats.entries()) await db.insert(schema.categories).values({ slug: slug(name), name, sort: i, menuGroup: DEFAULT_GROUPS[slug(name)] ?? null }).onConflictDoNothing();
   const all = await db.select().from(schema.categories); const id = (n: string) => all.find((c) => c.name === n)!.id;
   const S = ["S", "M", "L", "XL", "XXL"];
   // Demo data. Replace via Admin → Products (add real photos with image URLs).

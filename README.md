@@ -66,6 +66,18 @@ Notes: Vercel's free (Hobby) plan is for non-commercial use, so a shop should us
 
 **Alternative:** any VPS (Hetzner, DigitalOcean, etc.) with Node 22 + Postgres: `npm install && npm run db:push && npm run setup && npm run build && npm run start` behind Nginx/Caddy with HTTPS, plus a cron entry for `/api/cron/expire`. Local disk storage works there.
 
+## Photos
+
+Until real photos are added, products show gold line-art illustrations. To use real photos:
+- **One by one:** Admin → Products → open a product → upload files (needs Cloudinary or S3 on Vercel) or paste image links (one per line).
+- **All at once:** put https image links per product in `scripts/demo-images.json`, then run `npm run db:images` (add `--force` to replace existing photos). Only `https://` links are accepted.
+
+Use photos you have the right to use. Free stock sites (Unsplash, Pexels) are fine for temporary placeholders, but shoppers should see your actual products before you take real orders, so replace them with photos of the real items.
+
+## Shop menu
+
+The Shop dropdown is built from categories. Each category has a **menu group** (Admin → Categories), e.g. Fragrance, Underwear, Clothing. Same group = same column; empty = "More". A new category is reachable from the menu straight away. "Offers" appears only while at least one product is on sale.
+
 ## Operations
 
 **Scheduler (every 5 minutes):** `GET /api/cron/expire` with `Authorization: Bearer $CRON_SECRET`. It expires unpaid orders, releases stock, retries queued/failed emails, and purges old rate-limit rows.

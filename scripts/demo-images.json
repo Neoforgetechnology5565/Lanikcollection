@@ -1,0 +1,15 @@
+{
+  "_help": "Paste image links (https://...) for each product below, then run: npm run db:images   (use --force to replace existing photos). Only products without photos are changed unless --force.",
+  "oud-royale-eau-de-parfum-100ml": [],
+  "amber-noir-perfume-oil-50ml": [],
+  "premium-cotton-boxers-3-pack": [],
+  "classic-stretch-boxer-briefs": [],
+  "ribbed-cotton-singlet": [],
+  "sport-fit-singlet-2-pack": [],
+  "gold-trim-polo-shirt": [],
+  "pique-cotton-polo": [],
+  "slim-fit-stretch-jeans": [],
+  "relaxed-straight-jeans": [],
+  "leather-belt": [],
+  "fragrance-gift-set": []
+}
