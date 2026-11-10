@@ -1,0 +1,36 @@
+import "server-only";
+import { cookies } from "next/headers";
+import { SignJWT, jwtVerify } from "jose";
+import { redirect } from "next/navigation";
+
+const COOKIE = "lanik_admin";
+const key = () => {
+  const s = process.env.SESSION_SECRET;
+  if (!s || s.length < 32) throw new Error("SESSION_SECRET must be set (32+ chars)");
+  return new TextEncoder().encode(s);
+};
+
+export async function createAdminSession(email: string) {
+  const token = await new SignJWT({ email, role: "admin" }).setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt().setExpirationTime("8h").sign(key());
+  (await cookies()).set(COOKIE, token, {
+    httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 8 * 3600,
+  });
+}
+export async function destroyAdminSession() { (await cookies()).delete(COOKIE); }
+
+export async function getAdmin(): Promise<{ email: string } | null> {
+  const t = (await cookies()).get(COOKIE)?.value;
+  if (!t) return null;
+  try {
+    const { payload } = await jwtVerify(t, key());
+    return payload.role === "admin" ? { email: String(payload.email) } : null;
+  } catch { return null; }
+}
+
+/** Call at the top of every admin page, server action and route handler. */
+export async function requireAdmin() {
+  const a = await getAdmin();
+  if (!a) redirect("/admin/login");
+  return a;
+}
