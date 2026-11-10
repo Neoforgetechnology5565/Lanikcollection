@@ -7,19 +7,22 @@ import { getSettings } from "@/lib/settings";
 import { getContent, safeHref } from "@/lib/content";
 import { getCustomerId } from "@/lib/session";
 import { db, schema } from "@/db";
+import { and, count, eq, gt, sql } from "drizzle-orm";
+import { buildGroups } from "@/lib/menu";
 
 export const dynamic = "force-dynamic";
 
 export default async function SiteLayout({ children }: { children: React.ReactNode }) {
-  const [s, c, cats, cid] = await Promise.all([
+  const [s, c, cats, cid, offers] = await Promise.all([
     getSettings().catch(() => null), getContent(), db.select().from(schema.categories).orderBy(schema.categories.sort), getCustomerId(),
+    db.select({ n: count() }).from(schema.products).where(and(eq(schema.products.active, true), gt(schema.products.saleKobo, 0), sql`${schema.products.saleKobo} < ${schema.products.priceKobo}`)),
   ]);
   const wa = s?.whatsapp?.replace(/\D/g, "");
   const socials = Object.entries(c.socials).filter(([, v]) => v);
   return (
     <>
         <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-gold focus:p-3">Skip to content</a>
-        <Header cats={cats.map((x) => ({ slug: x.slug, name: x.name }))} signedIn={!!cid} announcement={c.announcement} />
+        <Header groups={buildGroups(cats)} hasOffers={(offers[0]?.n ?? 0) > 0} signedIn={!!cid} announcement={c.announcement} />
         <WishlistSync signedIn={!!cid} />
         <main id="main" className="flex-1">{children}</main>
         <footer className="bg-ink text-champagne mt-24 grain">

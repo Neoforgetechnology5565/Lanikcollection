@@ -22,6 +22,7 @@ export const categories = pgTable("categories", {
   slug: text("slug").notNull().unique(),
   name: text("name").notNull(),
   sort: integer("sort").notNull().default(0),
+  menuGroup: text("menu_group"), // heading in the Shop dropdown; empty = "More"
 });
 
 export const products = pgTable("products", {

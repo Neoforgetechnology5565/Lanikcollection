@@ -1,29 +1,30 @@
 import Link from "next/link";
-import { and, asc, desc, eq, gt, ilike, or } from "drizzle-orm";
+import { and, asc, desc, eq, gt, ilike, or, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { ProductCard } from "@/components/ProductCard";
 
 export const metadata = { title: "Shop" };
 const PAGE = 12;
 
-export default async function Shop({ searchParams }: { searchParams: Promise<{ q?: string; cat?: string; sort?: string; page?: string; stock?: string }> }) {
+export default async function Shop({ searchParams }: { searchParams: Promise<{ q?: string; cat?: string; sort?: string; page?: string; stock?: string; sale?: string }> }) {
   const sp = await searchParams;
   const cats = await db.select().from(schema.categories).orderBy(schema.categories.sort);
   const cat = cats.find((c) => c.slug === sp.cat);
   const q = sp.q?.trim().slice(0, 80);
   const like = q ? `%${q.replace(/[%_\\]/g, "")}%` : null;
   const where = and(eq(schema.products.active, true), cat ? eq(schema.products.categoryId, cat.id) : undefined,
-    like ? or(ilike(schema.products.name, like), ilike(schema.products.description, like)) : undefined, sp.stock === "1" ? gt(schema.products.stock, 0) : undefined);
+    like ? or(ilike(schema.products.name, like), ilike(schema.products.description, like)) : undefined, sp.stock === "1" ? gt(schema.products.stock, 0) : undefined,
+    sp.sale === "1" ? sql`${schema.products.saleKobo} > 0 and ${schema.products.saleKobo} < ${schema.products.priceKobo}` : undefined);
   const order = sp.sort === "price_asc" ? asc(schema.products.priceKobo) : sp.sort === "price_desc" ? desc(schema.products.priceKobo) : desc(schema.products.createdAt);
   const page = Math.max(1, Number(sp.page) || 1);
   const rows = await db.select().from(schema.products).where(where).orderBy(order).limit(PAGE + 1).offset((page - 1) * PAGE);
   const more = rows.length > PAGE;
   const byId = new Map(cats.map((c) => [c.id, c]));
-  const href = (o: Record<string, string | undefined>) => { const u = new URLSearchParams(); const m = { q, cat: sp.cat, sort: sp.sort, stock: sp.stock, ...o }; Object.entries(m).forEach(([k, v]) => v && u.set(k, v)); return `/shop?${u}`; };
+  const href = (o: Record<string, string | undefined>) => { const u = new URLSearchParams(); const m = { q, cat: sp.cat, sort: sp.sort, stock: sp.stock, sale: sp.sale, ...o }; Object.entries(m).forEach(([k, v]) => v && u.set(k, v)); return `/shop?${u}`; };
   const pill = (on: boolean) => `px-4 py-2 text-[12px] font-semibold tracking-[.15em] uppercase border transition ${on ? "bg-ink text-gold-light border-ink" : "border-champagne hover:border-gold bg-white"}`;
   return (
     <div className="mx-auto max-w-7xl px-4 pt-10">
-      <div className="text-center"><p className="eyebrow">{q ? "Search" : "The collection"}</p><h1 className="section-title mt-2">{cat?.name ?? (q ? `“${q}”` : "Shop all")}</h1><div className="rule mt-5 mx-auto max-w-xs" /></div>
+      <div className="text-center"><p className="eyebrow">{q ? "Search" : sp.sale === "1" ? "Reduced prices" : sp.sort === "newest" ? "Just landed" : "The collection"}</p><h1 className="section-title mt-2">{cat?.name ?? (q ? `“${q}”` : sp.sale === "1" ? "Offers" : sp.sort === "newest" ? "New in" : "Shop all")}</h1><div className="rule mt-5 mx-auto max-w-xs" /></div>
       <div className="mt-8 flex flex-wrap gap-2 justify-center">
         <Link href={href({ cat: undefined, page: undefined })} className={pill(!cat)}>All</Link>
         {cats.map((c) => <Link key={c.id} href={href({ cat: c.slug, page: undefined })} className={pill(cat?.id === c.id)}>{c.name}</Link>)}
