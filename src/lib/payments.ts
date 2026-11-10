@@ -6,6 +6,7 @@ import { createHostedPayment, createVirtualAccount, verifyByReference, flwConfig
 import { getSettings, clampExpiry, type Method } from "./settings";
 import { releaseStock, tryReserveStock } from "./orders";
 import { toKobo, toNairaNumber } from "./money";
+import { mailOrderPaid } from "./mail";
 
 type Order = typeof schema.orders.$inferSelect;
 type Payment = typeof schema.payments.$inferSelect;
@@ -97,7 +98,9 @@ export async function reconcileTxRef(txRef: string): Promise<ReconcileResult> {
   if (p.status === "SUCCESSFUL") return "already";
   const v = await verifyByReference(txRef); // authoritative server-to-server call
   if (!v) return "pending";
-  return applyVerification(p.id, v);
+  const r = await applyVerification(p.id, v);
+  if (r === "paid" || r === "late_paid") await mailOrderPaid(p.orderId); // after commit; best-effort
+  return r;
 }
 
 export async function applyVerification(paymentId: number, v: VerifiedTx): Promise<ReconcileResult> {
@@ -212,7 +215,8 @@ export async function approveManualProof(proofId: number, adminEmail: string) {
     }
     await tx.update(schema.orders).set({ status: "PAID", paidAt: new Date() }).where(eq(schema.orders.id, o.id));
     await tx.insert(schema.auditLog).values({ actor: adminEmail, action: "proof.approve", detail: `order ${o.number}, proof ${proof.id}` });
-  });
+    return o.id;
+  }).then((orderId) => mailOrderPaid(orderId));
 }
 
 export async function rejectManualProof(proofId: number, adminEmail: string, reason: string) {

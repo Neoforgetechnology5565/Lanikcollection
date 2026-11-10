@@ -1,52 +1,34 @@
-import { revalidatePath } from "next/cache";
-import { desc, eq, ilike, or } from "drizzle-orm";
+import Link from "next/link";
+import { desc, eq, ilike, or, and } from "drizzle-orm";
 import { db, schema } from "@/db";
-import { requireAdmin } from "@/lib/session";
-import { releaseStock } from "@/lib/orders";
 import { naira } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
-// PAID is deliberately absent: an order becomes PAID only through verified payment or an approved receipt.
-const SETTABLE = ["PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"] as const;
+const STATUSES = ["AWAITING_PAYMENT", "PAID", "REVIEW", "PROCESSING", "SHIPPED", "DELIVERED", "EXPIRED", "CANCELLED"] as const;
+const tone: Record<string, string> = { PAID: "bg-green-100 text-green-900", REVIEW: "bg-orange-100 text-orange-900", AWAITING_PAYMENT: "bg-amber-100 text-amber-900", EXPIRED: "bg-gray-200", CANCELLED: "bg-gray-200", PROCESSING: "bg-blue-100 text-blue-900", SHIPPED: "bg-indigo-100 text-indigo-900", DELIVERED: "bg-emerald-100 text-emerald-900" };
 
-async function setStatus(fd: FormData) {
-  "use server";
-  const a = await requireAdmin();
-  const status = SETTABLE.find((s) => s === fd.get("status")); const id = Number(fd.get("id"));
-  if (!status || !id) return;
-  await db.transaction(async (tx) => {
-    const [o] = await tx.select().from(schema.orders).where(eq(schema.orders.id, id)).for("update");
-    if (!o) return;
-    const paid = ["PAID", "PROCESSING", "SHIPPED", "DELIVERED"].includes(o.status);
-    if (status !== "CANCELLED" && !paid) return; // can't fulfil an unpaid order
-    await tx.update(schema.orders).set({ status }).where(eq(schema.orders.id, id));
-    if (status === "CANCELLED") await releaseStock(tx, id);
-    await tx.insert(schema.auditLog).values({ actor: a.email, action: "order.status", detail: `${o.number}: ${o.status} → ${status}` });
-  });
-  revalidatePath("/admin/orders");
-}
-
-export default async function Orders({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
-  const { q } = await searchParams;
+export default async function Orders({ searchParams }: { searchParams: Promise<{ q?: string; status?: string }> }) {
+  const { q, status } = await searchParams;
+  const st = STATUSES.find((s) => s === status);
+  const like = q ? `%${q.replace(/[%_\\]/g, "")}%` : null;
   const rows = await db.select().from(schema.orders)
-    .where(q ? or(ilike(schema.orders.number, `%${q}%`), ilike(schema.orders.customerName, `%${q}%`), ilike(schema.orders.email, `%${q}%`)) : undefined)
-    .orderBy(desc(schema.orders.id)).limit(100);
+    .where(and(st ? eq(schema.orders.status, st) : undefined, like ? or(ilike(schema.orders.number, like), ilike(schema.orders.customerName, like), ilike(schema.orders.email, like), ilike(schema.orders.phone, like)) : undefined))
+    .orderBy(desc(schema.orders.id)).limit(150);
   return (
     <div className="space-y-4">
       <h1 className="font-serif text-3xl font-bold">Orders</h1>
-      <form className="flex gap-2"><input name="q" defaultValue={q} placeholder="Search order no., name or email" className="input max-w-sm" /><button className="btn btn-dark">Search</button></form>
+      <form className="flex gap-2 flex-wrap"><input name="q" defaultValue={q} placeholder="Search order no., name, email, phone" className="input max-w-sm" />{st && <input type="hidden" name="status" value={st} />}<button className="btn btn-dark">Search</button></form>
+      <div className="flex gap-1.5 flex-wrap text-xs"><Link href="/admin/orders" className={`btn ${!st ? "btn-dark" : "btn-line"} !py-1`}>All</Link>{STATUSES.map((s) => <Link key={s} href={`/admin/orders?status=${s}`} className={`btn ${st === s ? "btn-dark" : "btn-line"} !py-1`}>{s.replace("_", " ")}</Link>)}</div>
       <div className="overflow-x-auto card"><table className="w-full text-sm">
-        <thead className="text-left text-xs uppercase tracking-wider bg-champagne/50"><tr>{["Order", "Customer", "Total", "Status", "Note", "Update"].map((h) => <th key={h} className="p-2">{h}</th>)}</tr></thead>
+        <thead className="text-left text-xs uppercase tracking-wider bg-champagne/50"><tr>{["Order", "Customer", "Total", "Status", "Note"].map((h) => <th key={h} className="p-2">{h}</th>)}</tr></thead>
         <tbody>{rows.map((o) => (
           <tr key={o.id} className="border-t border-champagne align-top">
-            <td className="p-2"><b>{o.number}</b><br /><span className="text-xs text-ink/60">{o.createdAt.toLocaleString("en-NG")}</span></td>
+            <td className="p-2"><Link className="font-bold underline" href={`/admin/orders/${o.number}`}>{o.number}</Link><br /><span className="text-xs text-ink/60">{o.createdAt.toLocaleString("en-NG")}</span></td>
             <td className="p-2">{o.customerName}<br /><span className="text-xs">{o.phone} · {o.city}, {o.state}</span></td>
-            <td className="p-2">{naira(o.totalKobo)}</td>
-            <td className="p-2 font-semibold">{o.status}</td>
-            <td className="p-2 text-xs max-w-56">{o.adminNote}</td>
-            <td className="p-2"><form action={setStatus} className="flex gap-1"><input type="hidden" name="id" value={o.id} />
-              <select name="status" className="input !py-1 !px-2 !w-auto">{SETTABLE.map((s) => <option key={s}>{s}</option>)}</select><button className="btn btn-line !py-1 !px-3">Set</button></form></td>
-          </tr>))}</tbody></table></div>
+            <td className="p-2 whitespace-nowrap">{naira(o.totalKobo)}</td>
+            <td className="p-2"><span className={`text-xs font-bold px-2 py-0.5 ${tone[o.status]}`}>{o.status.replace("_", " ")}</span></td>
+            <td className="p-2 text-xs max-w-56 text-ink/70">{o.adminNote}</td>
+          </tr>))}</tbody></table>{rows.length === 0 && <p className="p-4 text-sm text-ink/60">No orders match.</p>}</div>
     </div>
   );
 }

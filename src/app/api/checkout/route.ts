@@ -3,6 +3,8 @@ import { z } from "zod";
 import { createOrder, OrderError } from "@/lib/orders";
 import { startPayment, PaymentUnavailable } from "@/lib/payments";
 import { METHODS } from "@/lib/settings";
+import { getCustomerId } from "@/lib/session";
+import { mailOrderCreated } from "@/lib/mail";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +33,7 @@ export async function POST(req: Request) {
   const baseUrl = process.env.APP_URL ?? new URL(req.url).origin;
 
   let order;
-  try { order = await createOrder(input); }
+  try { order = await createOrder({ ...input, customerId: await getCustomerId() }); await mailOrderCreated(order.id); }
   catch (e) {
     if (e instanceof OrderError) return NextResponse.json({ error: e.message }, { status: 409 });
     throw e;

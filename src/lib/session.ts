@@ -34,3 +34,16 @@ export async function requireAdmin() {
   if (!a) redirect("/admin/login");
   return a;
 }
+
+// ---- customers ----
+const CCOOKIE = "lanik_customer";
+export async function createCustomerSession(id: number) {
+  const token = await new SignJWT({ cid: id, role: "customer" }).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime("30d").sign(key());
+  (await cookies()).set(CCOOKIE, token, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 30 * 86400 });
+}
+export async function destroyCustomerSession() { (await cookies()).delete(CCOOKIE); }
+export async function getCustomerId(): Promise<number | null> {
+  const t = (await cookies()).get(CCOOKIE)?.value;
+  if (!t) return null;
+  try { const { payload } = await jwtVerify(t, key()); return payload.role === "customer" ? Number(payload.cid) : null; } catch { return null; }
+}

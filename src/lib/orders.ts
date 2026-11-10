@@ -23,62 +23,69 @@ export function unitPrice(p: { priceKobo: number; saleKobo: number | null; whole
   return u;
 }
 
-/** Prices are always recomputed from the database; the client's totals are never trusted. */
-export async function createOrder(input: CheckoutInput) {
-  const settings = await getSettings();
-  if (!input.items.length) throw new OrderError("Your cart is empty");
+export type Quote = {
+  lines: { productId: number; name: string; size: string | null; color: string | null; qty: number; unitKobo: number }[];
+  subtotalKobo: number; discountKobo: number; discountCode: string | null; shippingKobo: number; totalKobo: number;
+};
 
-  // merge duplicate lines
+/** Prices are always recomputed from the database; the client's totals are never trusted. Pure read: reserves nothing. */
+export async function priceCart(q: Pick<CheckoutInput, "items" | "discountCode"> & { state?: string | null }, dbx: typeof db | Tx = db): Promise<Quote> {
+  if (!q.items.length) throw new OrderError("Your cart is empty");
+  const settings = await getSettings();
   const lines = new Map<string, CartLine>();
-  for (const l of input.items) {
+  for (const l of q.items) {
     const k = `${l.productId}|${l.size ?? ""}|${l.color ?? ""}`;
     const prev = lines.get(k);
     lines.set(k, prev ? { ...prev, qty: prev.qty + l.qty } : { ...l });
   }
   const merged = [...lines.values()];
+  const ids = [...new Set(merged.map((l) => l.productId))];
+  const prods = await dbx.select().from(schema.products).where(inArray(schema.products.id, ids));
+  const byId = new Map(prods.map((p) => [p.id, p]));
+  const out: Quote["lines"] = []; let subtotal = 0;
+  for (const l of merged) {
+    const p = byId.get(l.productId);
+    if (!p || !p.active) throw new OrderError("A product in your cart is no longer available");
+    if (p.sizes.length && (!l.size || !p.sizes.includes(l.size))) throw new OrderError(`Choose a size for ${p.name}`);
+    if (p.colors.length && (!l.color || !p.colors.includes(l.color))) throw new OrderError(`Choose a colour for ${p.name}`);
+    const total = merged.filter((m) => m.productId === p.id).reduce((a, m) => a + m.qty, 0); // wholesale tier uses total qty of the product
+    const unit = unitPrice(p, total);
+    subtotal += unit * l.qty;
+    out.push({ productId: p.id, name: p.name, size: l.size ?? null, color: l.color ?? null, qty: l.qty, unitKobo: unit });
+  }
+  let discount = 0; let code: string | null = null;
+  if (q.discountCode?.trim()) {
+    const [d] = await dbx.select().from(schema.discountCodes)
+      .where(and(eq(schema.discountCodes.code, q.discountCode.trim().toUpperCase()), eq(schema.discountCodes.active, true)));
+    if (!d) throw new OrderError("That discount code is not valid");
+    discount = Math.floor((subtotal * d.percent) / 100); code = d.code;
+  }
+  let shipping = settings.shippingFlatKobo;
+  if (q.state) {
+    const [z] = await dbx.select().from(schema.shippingZones).where(eq(schema.shippingZones.state, q.state));
+    if (z) shipping = z.feeKobo;
+  }
+  return { lines: out, subtotalKobo: subtotal, discountKobo: discount, discountCode: code, shippingKobo: shipping, totalKobo: subtotal - discount + shipping };
+}
 
+export async function createOrder(input: CheckoutInput & { customerId?: number | null }) {
   return db.transaction(async (tx) => {
-    const ids = [...new Set(merged.map((l) => l.productId))];
-    const prods = await tx.select().from(schema.products).where(inArray(schema.products.id, ids));
-    const byId = new Map(prods.map((p) => [p.id, p]));
-
-    const items: (typeof schema.orderItems.$inferInsert)[] = [];
-    let subtotal = 0;
-    for (const l of merged) {
-      const p = byId.get(l.productId);
-      if (!p || !p.active) throw new OrderError("A product in your cart is no longer available");
-      if (p.sizes.length && (!l.size || !p.sizes.includes(l.size))) throw new OrderError(`Choose a size for ${p.name}`);
-      if (p.colors.length && (!l.color || !p.colors.includes(l.color))) throw new OrderError(`Choose a colour for ${p.name}`);
-      // atomic reservation: never oversell
-      const total = merged.filter((m) => m.productId === p.id).reduce((a, m) => a + m.qty, 0);
-      const unit = unitPrice(p, total);
-      subtotal += unit * l.qty;
-      items.push({ orderId: 0, productId: p.id, name: p.name, size: l.size ?? null, color: l.color ?? null, qty: l.qty, unitKobo: unit });
-    }
-    for (const id of ids) {
-      const qty = merged.filter((m) => m.productId === id).reduce((a, m) => a + m.qty, 0);
+    const quote = await priceCart({ items: input.items, discountCode: input.discountCode, state: input.state }, tx);
+    // atomic reservation: never oversell
+    const need = new Map<number, number>();
+    for (const l of quote.lines) need.set(l.productId, (need.get(l.productId) ?? 0) + l.qty);
+    for (const [id, qty] of need) {
       const r = await tx.update(schema.products).set({ stock: sql`${schema.products.stock} - ${qty}` })
-        .where(and(eq(schema.products.id, id), sql`${schema.products.stock} >= ${qty}`)).returning({ id: schema.products.id });
-      if (!r.length) throw new OrderError(`Sorry, "${byId.get(id)!.name}" does not have enough stock`);
+        .where(and(eq(schema.products.id, id), sql`${schema.products.stock} >= ${qty}`)).returning({ id: schema.products.id, name: schema.products.name });
+      if (!r.length) throw new OrderError(`Sorry, "${quote.lines.find((l) => l.productId === id)!.name}" does not have enough stock`);
     }
-
-    let discount = 0; let code: string | null = null;
-    if (input.discountCode) {
-      const [d] = await tx.select().from(schema.discountCodes)
-        .where(and(eq(schema.discountCodes.code, input.discountCode.trim().toUpperCase()), eq(schema.discountCodes.active, true)));
-      if (!d) throw new OrderError("That discount code is not valid");
-      discount = Math.floor((subtotal * d.percent) / 100); code = d.code;
-    }
-    const shipping = settings.shippingFlatKobo;
-    const total = subtotal - discount + shipping;
-
     const [order] = await tx.insert(schema.orders).values({
-      number: newNumber(), accessToken: randomBytes(16).toString("hex"),
+      number: newNumber(), accessToken: randomBytes(16).toString("hex"), customerId: input.customerId ?? null,
       customerName: input.customerName, email: input.email, phone: input.phone,
       address: input.address, city: input.city, state: input.state, notes: input.notes ?? null,
-      subtotalKobo: subtotal, shippingKobo: shipping, discountKobo: discount, totalKobo: total, discountCode: code,
+      subtotalKobo: quote.subtotalKobo, shippingKobo: quote.shippingKobo, discountKobo: quote.discountKobo, totalKobo: quote.totalKobo, discountCode: quote.discountCode,
     }).returning();
-    await tx.insert(schema.orderItems).values(items.map((i) => ({ ...i, orderId: order.id })));
+    await tx.insert(schema.orderItems).values(quote.lines.map((l) => ({ ...l, orderId: order.id })));
     return order;
   });
 }

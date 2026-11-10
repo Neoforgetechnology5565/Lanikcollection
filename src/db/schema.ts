@@ -47,6 +47,7 @@ export const orders = pgTable("orders", {
   id: serial("id").primaryKey(),
   number: text("number").notNull().unique(),
   accessToken: text("access_token").notNull(), // lets a guest view their own order
+  customerId: integer("customer_id"),            // set when placed while signed in
   status: orderStatus("status").notNull().default("AWAITING_PAYMENT"),
   customerName: text("customer_name").notNull(),
   email: text("email").notNull(),
@@ -150,5 +151,55 @@ export const auditLog = pgTable("audit_log", {
   actor: text("actor").notNull(),
   action: text("action").notNull(),
   detail: text("detail"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const customers = pgTable("customers", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull().unique(),
+  name: text("name").notNull(),
+  phone: text("phone"),
+  passwordHash: text("password_hash").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const addresses = pgTable("addresses", {
+  id: serial("id").primaryKey(),
+  customerId: integer("customer_id").notNull().references(() => customers.id, { onDelete: "cascade" }),
+  label: text("label").notNull().default("Home"),
+  address: text("address").notNull(),
+  city: text("city").notNull(),
+  state: text("state").notNull(),
+  phone: text("phone"),
+});
+
+export const reviews = pgTable("reviews", {
+  id: serial("id").primaryKey(),
+  productId: integer("product_id").notNull().references(() => products.id, { onDelete: "cascade" }),
+  customerId: integer("customer_id").notNull().references(() => customers.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  rating: integer("rating").notNull(),
+  body: text("body").notNull(),
+  status: text("status").notNull().default("PENDING"), // PENDING | APPROVED | REJECTED
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex("reviews_one_per_customer").on(t.productId, t.customerId)]);
+
+export const shippingZones = pgTable("shipping_zones", {
+  state: text("state").primaryKey(),
+  feeKobo: integer("fee_kobo").notNull(),
+});
+
+export const subscribers = pgTable("subscribers", {
+  email: text("email").primaryKey(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const emails = pgTable("emails", {
+  id: serial("id").primaryKey(),
+  toAddress: text("to_address").notNull(),
+  subject: text("subject").notNull(),
+  html: text("html").notNull(),
+  status: text("status").notNull().default("QUEUED"), // QUEUED (no SMTP) | SENT | FAILED
+  error: text("error"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

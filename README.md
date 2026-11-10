@@ -9,7 +9,7 @@ npm install
 npm run db:push             # create tables
 npm run db:seed             # demo products, categories, admin user from ADMIN_EMAIL / ADMIN_PASSWORD
 npm run dev                 # http://localhost:3000   admin: /admin
-npm test                    # payment-flow tests (uses a local fake Flutterwave, see below)
+npm test                    # 19 tests; needs TEST_DATABASE_URL (a separate DB) and uses a local fake Flutterwave
 ```
 
 ## Payments (Flutterwave)
@@ -37,5 +37,19 @@ I had no Flutterwave credentials, so everything above was tested against `script
 - Channel codes sent to hosted checkout: `card, ussd, opay, nqr, account`.
 - Which channels your merchant account has enabled.
 
-## Still to build
-Customer accounts/login, wishlist, reviews, emails and notifications, Cloudinary/Supabase image upload (admin currently takes image URLs), categories and discounts admin UI, inline variant-level stock (stock is per product), rate limiting beyond the admin-login throttle, real product photography.
+## What's in the box
+**Storefront:** rotating hero, category tiles, best sellers / new arrivals, promo band, wholesale section, newsletter, product pages (gallery, size/colour, wholesale tiers, accordion, verified-buyer reviews, wishlist), search with live suggestions, cart, checkout with server-computed totals (discount code, shipping by state), order tracking (guest or account), customer accounts with saved addresses, FAQ / shipping / privacy / terms pages, WhatsApp button, SEO metadata + product JSON-LD.
+
+**Admin (`/admin`):** dashboard, orders (+ detail and fulfilment with customer emails), payments (all transactions, VA details, report, CSV), receipt review, customers, review moderation, products (image upload), inventory, categories, discount codes, shipping fees by state, website content (banners, announcement, promo, contact, socials), payment settings, email outbox.
+
+**Email:** order received, payment confirmed and status updates are recorded in Admin → Emails and delivered when `SMTP_URL` / `MAIL_FROM` are set.
+
+**Product art:** until real photos are uploaded, products show gold line-art illustrations by category.
+
+## Known gaps / next steps
+- Stock is tracked per product, not per size/colour variant.
+- Wishlist is stored on the device (not synced to the account).
+- Images are stored on local disk (`uploads/`). On serverless hosts (e.g. Vercel) switch `src/lib/uploads.ts` to Cloudinary / Supabase Storage / S3.
+- Password reset and email verification for customer accounts.
+- Admin and customer login throttling is in-memory per server instance; use a shared store (Redis) if you run multiple instances.
+- Privacy / terms / shipping pages are templates: review them before launch.

@@ -4,6 +4,6 @@ import { CheckoutForm } from "./CheckoutForm";
 export const metadata = { title: "Checkout" };
 export default async function Checkout() {
   const [methods, s] = await Promise.all([availableMethods(), getSettings()]);
-  return <div className="mx-auto max-w-5xl px-4 pt-10"><h1 className="font-serif text-4xl font-bold">Checkout</h1>
+  return <div className="mx-auto max-w-5xl px-4 pt-12"><p className="eyebrow">Secure checkout</p><h1 className="section-title mt-2">Checkout</h1>
     <CheckoutForm methods={methods} shippingKobo={s.shippingFlatKobo} /></div>;
 }
