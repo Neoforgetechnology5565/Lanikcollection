@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Logo } from "@/components/Logo";
 import { Header } from "@/components/Header";
 import { Newsletter } from "@/components/Newsletter";
+import { WishlistSync } from "@/components/WishlistSync";
 import { getSettings } from "@/lib/settings";
 import { getContent, safeHref } from "@/lib/content";
 import { getCustomerId } from "@/lib/session";
@@ -19,6 +20,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
     <>
         <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-gold focus:p-3">Skip to content</a>
         <Header cats={cats.map((x) => ({ slug: x.slug, name: x.name }))} signedIn={!!cid} announcement={c.announcement} />
+        <WishlistSync signedIn={!!cid} />
         <main id="main" className="flex-1">{children}</main>
         <footer className="bg-ink text-champagne mt-24 grain">
           <div className="rule" />

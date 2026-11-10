@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { db, schema } from "@/db";
 import { priceCart, createOrder } from "@/lib/orders";
 import { saveSettings, DEFAULTS } from "@/lib/settings";
+import { syncVariants } from "@/lib/catalog";
 
 let pid: number; let noSize: number;
 const sfx = Math.random().toString(36).slice(2, 7);
@@ -11,6 +12,7 @@ before(async () => {
   const [p] = await db.insert(schema.products).values({ slug: `pr-${sfx}`, name: "Price Test Polo", priceKobo: 1000000, saleKobo: 900000, wholesaleKobo: 700000, wholesaleMin: 6, sizes: ["M", "L"], colors: ["Black"], stock: 50 }).returning();
   const [q] = await db.insert(schema.products).values({ slug: `pn-${sfx}`, name: "No-size item", priceKobo: 500000, stock: 50 }).returning();
   pid = p.id; noSize = q.id;
+  await syncVariants(db, p.id, ["M", "L"], ["Black"], 50); await syncVariants(db, q.id, [], [], 50);
   await db.insert(schema.discountCodes).values({ code: `T${sfx.toUpperCase()}`, percent: 10 }).onConflictDoNothing();
   await db.insert(schema.shippingZones).values({ state: "Lagos", feeKobo: 150000 }).onConflictDoUpdate({ target: schema.shippingZones.state, set: { feeKobo: 150000 } });
 });

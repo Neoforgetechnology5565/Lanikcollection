@@ -5,6 +5,7 @@ import { startPayment, PaymentUnavailable } from "@/lib/payments";
 import { METHODS } from "@/lib/settings";
 import { getCustomerId } from "@/lib/session";
 import { mailOrderCreated } from "@/lib/mail";
+import { ipOf, limited } from "@/lib/ratelimit";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,8 @@ const Body = z.object({
 });
 
 export async function POST(req: Request) {
+  // each order holds stock until it expires, so cap how fast one network can create them
+  if (await limited(`checkout:ip:${ipOf(req)}`, 20, 600)) return NextResponse.json({ error: "Too many orders from this network. Please wait a few minutes." }, { status: 429 });
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Please check your details and try again.", issues: parsed.error.flatten().fieldErrors }, { status: 400 });
   const { method, ...input } = parsed.data;

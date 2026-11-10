@@ -124,3 +124,10 @@ export async function verifyByReference(txRef: string): Promise<VerifiedTx | nul
     throw e;
   }
 }
+
+/** Ask Flutterwave to refund (part of) a successful transaction. Refunds are asynchronous: status may be "pending". */
+export async function refundTransaction(providerTxId: string, amountNaira: number) {
+  const r = await flw<any>(`/transactions/${encodeURIComponent(providerTxId)}/refund`, { method: "POST", body: JSON.stringify({ amount: amountNaira }) });
+  const d = r?.data ?? {};
+  return { ref: d.id != null ? String(d.id) : null, status: String(d.status ?? "pending").toLowerCase(), raw: r };
+}

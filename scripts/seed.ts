@@ -1,6 +1,8 @@
 import bcrypt from "bcryptjs";
 import { db, schema } from "../src/db";
 import { DEFAULTS } from "../src/lib/settings";
+import { syncVariants, combos } from "../src/lib/catalog";
+import { eq } from "drizzle-orm";
 
 const cats = ["Perfumes", "Boxers", "Singlets", "Polo Shirts", "Jeans", "Other Fashion Items"];
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-");
@@ -29,8 +31,10 @@ async function main() {
     await db.insert(schema.products).values({
       slug: slug(name), name, description: `${name}: premium quality at an affordable price. Available for wholesale and retail.`,
       categoryId: id(cat), priceKobo: N(price), saleKobo: sale ? N(sale) : null, wholesaleKobo: ws ? N(ws) : null, wholesaleMin: wsMin,
-      sizes: [...sizes], colors: [...colors], stock, featured,
+      sizes: [...sizes], colors: [...colors], stock: 0, featured,
     }).onConflictDoNothing();
+    const [row] = await db.select().from(schema.products).where(eq(schema.products.slug, slug(name)));
+    await syncVariants(db, row.id, [...sizes], [...colors], Math.max(1, Math.floor(stock / combos([...sizes], [...colors]).length)));
   }
   await db.insert(schema.discountCodes).values({ code: "WELCOME10", percent: 10 }).onConflictDoNothing();
   await db.insert(schema.settings).values({ key: "app", value: DEFAULTS }).onConflictDoNothing(); // never overwrite admin config

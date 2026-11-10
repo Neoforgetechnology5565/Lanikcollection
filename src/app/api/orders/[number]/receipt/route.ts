@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
-import { mkdir, writeFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
-import path from "node:path";
 import { and, eq } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { toKobo } from "@/lib/money";
+import { sniffImage } from "@/lib/uploads";
+import { ipOf, limited } from "@/lib/ratelimit";
+import { putPrivate } from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
 const OK: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "application/pdf": "pdf" };
@@ -12,6 +13,7 @@ const OK: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "i
 // Manual transfer: the customer submits evidence. This only creates a PENDING proof; an admin must approve it.
 export async function POST(req: Request, { params }: { params: Promise<{ number: string }> }) {
   const { number } = await params;
+  if (await limited(`receipt:ip:${ipOf(req)}`, 20, 3600)) return NextResponse.json({ error: "Too many uploads. Try again later." }, { status: 429 });
   const form = await req.formData().catch(() => null);
   if (!form) return NextResponse.json({ error: "Invalid form" }, { status: 400 });
   const k = String(form.get("k") ?? "");
@@ -29,12 +31,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ number:
   if (file.size > 5 * 1024 * 1024) return NextResponse.json({ error: "Receipt must be under 5MB" }, { status: 400 });
   if (reference.length < 3 || !(amount > 0)) return NextResponse.json({ error: "Enter the transaction reference and amount" }, { status: 400 });
 
-  const dir = path.join(process.cwd(), "uploads", "receipts");
-  await mkdir(dir, { recursive: true });
-  const fileName = `${o.number}-${randomBytes(6).toString("hex")}.${OK[file.type]}`;
-  await writeFile(path.join(dir, fileName), Buffer.from(await file.arrayBuffer()));
+  const buf = Buffer.from(await file.arrayBuffer());
+  // trust the bytes, not the browser's claimed type
+  const sig = sniffImage(buf); const isPdf = buf.subarray(0, 5).toString() === "%PDF-";
+  if (!sig && !isPdf) return NextResponse.json({ error: "That file doesn't look like a JPG, PNG, WEBP or PDF" }, { status: 400 });
+  const mime = sig ? sig.mime : "application/pdf"; const ext = sig ? sig.ext : "pdf";
+  const fileName = `${o.number}-${randomBytes(6).toString("hex")}.${ext}`;
+  try { await putPrivate(fileName, buf, mime); } catch (e) { console.error("receipt store failed", e); return NextResponse.json({ error: "Could not store the receipt. Please try again." }, { status: 500 }); }
   await db.insert(schema.paymentProofs).values({
-    orderId: o.id, paymentId: pay.id, reference: reference.slice(0, 120), amountKobo: toKobo(amount), fileName, mime: file.type,
+    orderId: o.id, paymentId: pay.id, reference: reference.slice(0, 120), amountKobo: toKobo(amount), fileName, mime,
   });
   return NextResponse.json({ ok: true });
 }

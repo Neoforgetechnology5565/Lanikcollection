@@ -160,6 +160,8 @@ export const customers = pgTable("customers", {
   name: text("name").notNull(),
   phone: text("phone"),
   passwordHash: text("password_hash").notNull(),
+  emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
+  tokenVersion: integer("token_version").notNull().default(0), // bump to invalidate every existing session
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -199,7 +201,55 @@ export const emails = pgTable("emails", {
   toAddress: text("to_address").notNull(),
   subject: text("subject").notNull(),
   html: text("html").notNull(),
-  status: text("status").notNull().default("QUEUED"), // QUEUED (no SMTP) | SENT | FAILED
+  status: text("status").notNull().default("QUEUED"), // QUEUED (no provider) | SENT | FAILED
+  kind: text("kind").notNull().default("misc"),
+  attempts: integer("attempts").notNull().default(0),
+  sentAt: timestamp("sent_at", { withTimezone: true }),
   error: text("error"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Stock lives here, one row per size/colour combination ("" = not applicable).
+export const productVariants = pgTable("product_variants", {
+  id: serial("id").primaryKey(),
+  productId: integer("product_id").notNull().references(() => products.id, { onDelete: "cascade" }),
+  size: text("size").notNull().default(""),
+  color: text("color").notNull().default(""),
+  stock: integer("stock").notNull().default(0),
+}, (t) => [uniqueIndex("variant_unique").on(t.productId, t.size, t.color)]);
+
+export const authTokens = pgTable("auth_tokens", {
+  id: serial("id").primaryKey(),
+  customerId: integer("customer_id").notNull().references(() => customers.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(), // verify | reset
+  tokenHash: text("token_hash").notNull().unique(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
+});
+
+// Shared (database-backed) rate limiting so it works across many server instances.
+export const rateLimits = pgTable("rate_limits", {
+  key: text("key").primaryKey(),
+  count: integer("count").notNull().default(0),
+  windowStart: timestamp("window_start", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const wishlistItems = pgTable("wishlist_items", {
+  customerId: integer("customer_id").notNull().references(() => customers.id, { onDelete: "cascade" }),
+  productId: integer("product_id").notNull().references(() => products.id, { onDelete: "cascade" }),
+}, (t) => [uniqueIndex("wishlist_unique").on(t.customerId, t.productId)]);
+
+export const refunds = pgTable("refunds", {
+  id: serial("id").primaryKey(),
+  orderId: integer("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
+  paymentId: integer("payment_id").references(() => payments.id),
+  amountKobo: integer("amount_kobo").notNull(),
+  reason: text("reason").notNull().default(""),
+  method: text("method").notNull().default("manual"),   // flutterwave | manual
+  status: text("status").notNull().default("REQUESTED"), // REQUESTED | PROCESSED | FAILED
+  providerRef: text("provider_ref"),
+  error: text("error"),
+  createdBy: text("created_by").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  processedAt: timestamp("processed_at", { withTimezone: true }),
 });

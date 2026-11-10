@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db, schema, type Tx } from "@/db";
 import { getSettings } from "./settings";
+import { recomputeStock, takeVariantStock, returnVariantStock } from "./catalog";
 
 export type CartLine = { productId: number; size?: string | null; color?: string | null; qty: number };
 export type CheckoutInput = {
@@ -71,14 +72,15 @@ export async function priceCart(q: Pick<CheckoutInput, "items" | "discountCode">
 export async function createOrder(input: CheckoutInput & { customerId?: number | null }) {
   return db.transaction(async (tx) => {
     const quote = await priceCart({ items: input.items, discountCode: input.discountCode, state: input.state }, tx);
-    // atomic reservation: never oversell
-    const need = new Map<number, number>();
-    for (const l of quote.lines) need.set(l.productId, (need.get(l.productId) ?? 0) + l.qty);
-    for (const [id, qty] of need) {
-      const r = await tx.update(schema.products).set({ stock: sql`${schema.products.stock} - ${qty}` })
-        .where(and(eq(schema.products.id, id), sql`${schema.products.stock} >= ${qty}`)).returning({ id: schema.products.id, name: schema.products.name });
-      if (!r.length) throw new OrderError(`Sorry, "${quote.lines.find((l) => l.productId === id)!.name}" does not have enough stock`);
+    // atomic per-variant reservation: never oversell a size/colour
+    const touched = new Set<number>();
+    for (const l of quote.lines) {
+      if (!(await takeVariantStock(tx, l.productId, l.size, l.color, l.qty))) {
+        throw new OrderError(`Sorry, "${l.name}"${[l.size, l.color].filter(Boolean).length ? ` (${[l.size, l.color].filter(Boolean).join(", ")})` : ""} does not have enough stock`);
+      }
+      touched.add(l.productId);
     }
+    for (const id of touched) await recomputeStock(tx, id);
     const [order] = await tx.insert(schema.orders).values({
       number: newNumber(), accessToken: randomBytes(16).toString("hex"), customerId: input.customerId ?? null,
       customerName: input.customerName, email: input.email, phone: input.phone,
@@ -94,9 +96,8 @@ export async function releaseStock(tx: Tx, orderId: number) {
   const [o] = await tx.select().from(schema.orders).where(eq(schema.orders.id, orderId)).for("update");
   if (!o?.stockReserved) return;
   const items = await tx.select().from(schema.orderItems).where(eq(schema.orderItems.orderId, orderId));
-  for (const i of items) {
-    await tx.update(schema.products).set({ stock: sql`${schema.products.stock} + ${i.qty}` }).where(eq(schema.products.id, i.productId));
-  }
+  for (const i of items) await returnVariantStock(tx, i.productId, i.size, i.color, i.qty);
+  for (const id of new Set(items.map((i) => i.productId))) await recomputeStock(tx, id);
   await tx.update(schema.orders).set({ stockReserved: false }).where(eq(schema.orders.id, orderId));
 }
 
@@ -116,10 +117,7 @@ async function reserveOrThrow(tx: Tx, orderId: number) {
   const [o] = await tx.select().from(schema.orders).where(eq(schema.orders.id, orderId)).for("update");
   if (o.stockReserved) return;
   const items = await tx.select().from(schema.orderItems).where(eq(schema.orderItems.orderId, orderId));
-  for (const i of items) {
-    const r = await tx.update(schema.products).set({ stock: sql`${schema.products.stock} - ${i.qty}` })
-      .where(and(eq(schema.products.id, i.productId), sql`${schema.products.stock} >= ${i.qty}`)).returning({ id: schema.products.id });
-    if (!r.length) throw new OrderError("out of stock");
-  }
+  for (const i of items) if (!(await takeVariantStock(tx, i.productId, i.size, i.color, i.qty))) throw new OrderError("out of stock");
+  for (const id of new Set(items.map((i) => i.productId))) await recomputeStock(tx, id);
   await tx.update(schema.orders).set({ stockReserved: true }).where(eq(schema.orders.id, orderId));
 }

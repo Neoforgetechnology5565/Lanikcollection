@@ -5,7 +5,7 @@ import http from "node:http";
 type Tx = { tx_ref: string; amount: number; status: "pending" | "successful" | "failed" | null; id: number };
 export function startMockFlutterwave(port = 4010) {
   const txs = new Map<string, Tx>();
-  const state = { down: false, vaMinutes: 180, nextId: 1000, noChannels: new Set<string>() };
+  const state = { refundStatus: "completed", refundFail: false, down: false, vaMinutes: 180, nextId: 1000, noChannels: new Set<string>() };
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url!, `http://localhost:${port}`);
     const body = await new Promise<any>((r) => { let s = ""; req.on("data", (c) => (s += c)); req.on("end", () => r(s ? JSON.parse(s) : {})); });
@@ -25,6 +25,11 @@ export function startMockFlutterwave(port = 4010) {
         transfer_reference: "MOCK" + body.tx_ref, transfer_account: "9" + String(state.nextId).padStart(9, "0"), transfer_bank: "Mock Wema Bank",
         transfer_amount: body.amount, transfer_note: "Please make a bank transfer to Lanik Collections",
         account_expiration: new Date(Date.now() + state.vaMinutes * 60_000).toISOString(), mode: "banktransfer" } } });
+    }
+    const rf = url.pathname.match(/^\/v3\/transactions\/([^/]+)\/refund$/);
+    if (rf && req.method === "POST") {
+      if (state.refundFail) return send(400, { status: "error", message: "Refund not allowed for this transaction" });
+      return send(200, { status: "success", data: { id: 9000 + Number(rf[1]), status: state.refundStatus, amount_refunded: body.amount } });
     }
     if (url.pathname === "/v3/payments") {
       const ch = String(body.payment_options);

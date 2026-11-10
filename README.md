@@ -46,10 +46,28 @@ I had no Flutterwave credentials, so everything above was tested against `script
 
 **Product art:** until real photos are uploaded, products show gold line-art illustrations by category.
 
-## Known gaps / next steps
-- Stock is tracked per product, not per size/colour variant.
-- Wishlist is stored on the device (not synced to the account).
-- Images are stored on local disk (`uploads/`). On serverless hosts (e.g. Vercel) switch `src/lib/uploads.ts` to Cloudinary / Supabase Storage / S3.
-- Password reset and email verification for customer accounts.
-- Admin and customer login throttling is in-memory per server instance; use a shared store (Redis) if you run multiple instances.
+## Operations
+
+**Scheduler (every 5 minutes):** `GET /api/cron/expire` with `Authorization: Bearer $CRON_SECRET`. It expires unpaid orders, releases stock, retries queued/failed emails, and purges old rate-limit rows.
+
+**Stock** is tracked per size/colour (`product_variants`); `products.stock` is a cached total. Databases created before this change: run `npx tsx --env-file=.env scripts/backfill-variants.ts` once.
+
+**Storage:** product images and private receipts go through `src/lib/storage.ts`: `local` (default, single server only), any S3-compatible bucket (AWS S3, Cloudflare R2, Supabase, MinIO), or Cloudinary for product images. See `.env.example`. Receipts are never public.
+
+**Email:** set `RESEND_API_KEY` or `SMTP_URL` (+ `MAIL_FROM`). Order emails use templates editable in Admin → Email templates. Admin → Emails shows every message, lets you preview and resend, and failed mail is retried automatically (max 5 attempts).
+
+**Customer accounts:** email verification is required before guest orders placed with the same email appear in an account (prevents someone registering your address to read your orders). Password reset links are single-use and last 1 hour; a reset or password change signs out all other devices.
+
+**Rate limiting** is stored in Postgres, so it holds across multiple servers. Limits are per account (email) and per IP. Behind a proxy, make sure it overwrites `X-Forwarded-For`.
+
+**Refunds:** Admin → order → Refunds. "Refund via Flutterwave" calls the provider; "manual" records a refund you made yourself. Amounts are capped at what was paid, under a row lock, so the same money can't be refunded twice. A full refund cancels an unshipped order and releases its stock.
+
+**Reports:** Admin → Reports (by day/week/month, top products, categories, payment methods, states, refunds, CSV export). Days are Lagos days.
+
+## Not verified against real services
+Flutterwave (see above, including the refund endpoint shape), Resend, S3-compatible providers and Cloudinary have been exercised only against local stand-ins that follow their public docs. Send one real test of each before launch.
+
+## Known gaps
+- No admin tool to edit/delete customers or send marketing email to subscribers.
+- No in-app image cropping or reordering of product images.
 - Privacy / terms / shipping pages are templates: review them before launch.

@@ -29,7 +29,7 @@ async function submitReview(fd: FormData) {
   const [c] = await db.select().from(schema.customers).where(eq(schema.customers.id, cid));
   // Only verified buyers (a paid order containing this product) may review.
   const bought = await db.select({ id: schema.orders.id }).from(schema.orders).innerJoin(schema.orderItems, eq(schema.orderItems.orderId, schema.orders.id))
-    .where(and(eq(schema.orderItems.productId, productId), sql`${schema.orders.status} in ('PAID','PROCESSING','SHIPPED','DELIVERED')`, sql`(${schema.orders.customerId} = ${cid} or lower(${schema.orders.email}) = ${c.email})`)).limit(1);
+    .where(and(eq(schema.orderItems.productId, productId), sql`${schema.orders.status} in ('PAID','PROCESSING','SHIPPED','DELIVERED')`, c.emailVerifiedAt ? sql`(${schema.orders.customerId} = ${cid} or lower(${schema.orders.email}) = ${c.email})` : sql`${schema.orders.customerId} = ${cid}`)).limit(1);
   if (!bought.length) return;
   await db.insert(schema.reviews).values({ productId, customerId: cid, name: c.name.split(" ")[0], rating, body }).onConflictDoNothing();
   revalidatePath("/product/[slug]", "page");
@@ -41,6 +41,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const [cat] = p.categoryId ? await db.select().from(schema.categories).where(eq(schema.categories.id, p.categoryId)) : [];
   const relatedRows = p.categoryId ? await db.select().from(schema.products).where(and(eq(schema.products.categoryId, p.categoryId), ne(schema.products.id, p.id), eq(schema.products.active, true))).limit(4) : [];
   const related: CardProduct[] = relatedRows.map((r) => ({ ...r, categoryName: cat?.name, categorySlug: cat?.slug }));
+  const variants = await db.select({ size: schema.productVariants.size, color: schema.productVariants.color, stock: schema.productVariants.stock }).from(schema.productVariants).where(eq(schema.productVariants.productId, p.id));
   const reviews = await db.select().from(schema.reviews).where(and(eq(schema.reviews.productId, p.id), eq(schema.reviews.status, "APPROVED"))).orderBy(desc(schema.reviews.id));
   const avg = reviews.length ? reviews.reduce((a, r) => a + r.rating, 0) / reviews.length : 0;
   const cid = await getCustomerId();
@@ -65,7 +66,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           <p className="mt-4 text-3xl">{onSale ? <><b>{naira(price)}</b> <s className="text-ink/40 text-xl ml-2">{naira(p.priceKobo)}</s> <span className="ml-2 align-middle bg-gold text-ink text-xs font-bold px-2 py-1">-{Math.round((1 - price / p.priceKobo) * 100)}%</span></> : <b>{naira(price)}</b>}</p>
           {p.wholesaleKobo && p.wholesaleMin && <p className="mt-3 inline-block bg-ink text-gold-light text-xs tracking-widest uppercase px-3 py-2">Wholesale · {naira(p.wholesaleKobo)} each from {p.wholesaleMin} pcs</p>}
           <p className={`mt-4 text-sm font-semibold ${p.stock > 0 ? "text-green-800" : "text-red-700"}`}>● {p.stock > 5 ? "In stock" : p.stock > 0 ? `Only ${p.stock} left` : "Out of stock"}</p>
-          <AddToCart p={{ id: p.id, slug: p.slug, name: p.name, priceKobo: price, sizes: p.sizes, colors: p.colors, stock: p.stock, image: p.images[0] }} />
+          <AddToCart p={{ id: p.id, slug: p.slug, name: p.name, priceKobo: price, sizes: p.sizes, colors: p.colors, variants, image: p.images[0] }} />
           <div className="mt-4"><WishlistButton id={p.id} label /></div>
           <div className="mt-8 border-t border-champagne divide-y divide-champagne text-sm">
             <details className="py-4" open><summary className="cursor-pointer font-semibold uppercase tracking-widest text-xs">Description</summary><p className="mt-3 text-ink/80 whitespace-pre-line leading-relaxed">{p.description}</p></details>

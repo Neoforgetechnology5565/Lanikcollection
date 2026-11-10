@@ -6,6 +6,7 @@ import { startMockFlutterwave } from "../scripts/mock-flutterwave";
 import { createOrder } from "@/lib/orders";
 import { startPayment, reconcileTxRef, expireDueOrders } from "@/lib/payments";
 import { saveSettings, DEFAULTS } from "@/lib/settings";
+import { syncVariants, setAllStock } from "@/lib/catalog";
 import { POST as webhook } from "@/app/api/webhooks/flutterwave/route";
 
 let mock: Awaited<ReturnType<typeof startMockFlutterwave>>;
@@ -30,6 +31,7 @@ before(async () => {
   await saveSettings({ ...DEFAULTS });
   const [p] = await db.insert(schema.products).values({ slug: `t-${sfx}`, name: "Test Polo", priceKobo: 1500000, stock: 100 }).returning();
   pid = p.id;
+  await syncVariants(db, pid, [], [], 100);
 });
 after(async () => { mock.server.close(); });
 
@@ -113,11 +115,11 @@ test("late transfer with no stock left goes to REVIEW", async () => {
   const { o, p } = await newBankOrder();
   await db.update(schema.orders).set({ expiresAt: new Date(Date.now() - 1000) }).where(eq(schema.orders.id, o.id));
   await expireDueOrders();
-  await db.update(schema.products).set({ stock: 0 }).where(eq(schema.products.id, pid));
+  await setAllStock(db, pid, 0);
   await mock.ctl("/__pay", { tx_ref: p.txRef, amount: o.totalKobo / 100, status: "successful" });
   assert.equal(await reconcileTxRef(p.txRef), "review");
   assert.equal((await order(o.id)).status, "REVIEW");
-  await db.update(schema.products).set({ stock: 50 }).where(eq(schema.products.id, pid));
+  await setAllStock(db, pid, 50);
 });
 
 test("provider outage during expiry leaves the order open instead of expiring it", async () => {
@@ -141,6 +143,6 @@ test("unsupported channel fails gracefully and is recorded", async () => {
 });
 
 test("cannot oversell", async () => {
-  await db.update(schema.products).set({ stock: 1 }).where(eq(schema.products.id, pid));
+  await setAllStock(db, pid, 1);
   await assert.rejects(createOrder({ ...customer, items: [{ productId: pid, qty: 2 }] }), /enough stock/);
 });

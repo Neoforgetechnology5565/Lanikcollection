@@ -37,13 +37,20 @@ export async function requireAdmin() {
 
 // ---- customers ----
 const CCOOKIE = "lanik_customer";
-export async function createCustomerSession(id: number) {
-  const token = await new SignJWT({ cid: id, role: "customer" }).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime("30d").sign(key());
+export async function createCustomerSession(id: number, version: number) {
+  const token = await new SignJWT({ cid: id, v: version, role: "customer" }).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime("30d").sign(key());
   (await cookies()).set(CCOOKIE, token, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 30 * 86400 });
 }
 export async function destroyCustomerSession() { (await cookies()).delete(CCOOKIE); }
+/** Valid only while the customer's tokenVersion matches, so a password change/reset signs out every other device. */
 export async function getCustomerId(): Promise<number | null> {
   const t = (await cookies()).get(CCOOKIE)?.value;
   if (!t) return null;
-  try { const { payload } = await jwtVerify(t, key()); return payload.role === "customer" ? Number(payload.cid) : null; } catch { return null; }
+  try {
+    const { payload } = await jwtVerify(t, key());
+    if (payload.role !== "customer") return null;
+    const { db, schema } = await import("@/db"); const { eq } = await import("drizzle-orm");
+    const [c] = await db.select({ v: schema.customers.tokenVersion }).from(schema.customers).where(eq(schema.customers.id, Number(payload.cid)));
+    return c && c.v === Number(payload.v ?? 0) ? Number(payload.cid) : null;
+  } catch { return null; }
 }
