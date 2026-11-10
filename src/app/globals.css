@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #0B0907;
+  --color-gold: #D99A24;
+  --color-gold-light: #F5C45E;
+  --color-bronze: #A66A25;
+  --color-champagne: #E9D5B5;
+  --color-ivory: #FBF7EF;
+  --font-serif: "Playfair Display", "Didot", "Bodoni MT", Georgia, "Times New Roman", serif;
+  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+html { scroll-behavior: smooth; }
+body { background: var(--color-ivory); color: var(--color-ink); font-family: var(--font-sans); }
+.gold-text { background: linear-gradient(135deg, #F5C45E, #D99A24 55%, #A66A25); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: .5rem; padding: .75rem 1.5rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; font-size: .8rem; transition: .2s; cursor: pointer; border: 1px solid transparent; }
+.btn-gold { background: linear-gradient(135deg, #F5C45E, #D99A24); color: #0B0907; }
+.btn-gold:hover { filter: brightness(1.08); box-shadow: 0 6px 20px -8px rgba(217,154,36,.8); }
+.btn-dark { background: #0B0907; color: #F5C45E; border-color: #D99A24; }
+.btn-dark:hover { background: #1a1510; }
+.btn-line { border-color: #0B0907; }
+.btn-line:hover { background: #0B0907; color: #F5C45E; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.input { width: 100%; border: 1px solid #d9c9a8; background: #fff; padding: .7rem .9rem; font-size: .95rem; }
+.input:focus { outline: 2px solid #D99A24; outline-offset: -1px; }
+.label { display: block; font-size: .75rem; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; margin-bottom: .3rem; color: #5b4a2e; }
+.card { background: #fff; border: 1px solid #eadcc0; }

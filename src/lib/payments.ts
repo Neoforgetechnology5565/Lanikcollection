@@ -223,3 +223,15 @@ export async function rejectManualProof(proofId: number, adminEmail: string, rea
     await tx.insert(schema.auditLog).values({ actor: adminEmail, action: "proof.reject", detail: `proof ${proof.id}: ${reason}` });
   });
 }
+
+/** Methods the customer may actually use right now: enabled by the admin AND functional (keys / bank details present). */
+export async function availableMethods(): Promise<Method[]> {
+  const { flwConfigured } = await import("./flutterwave");
+  const s = await getSettings();
+  const live = flwConfigured();
+  return (Object.keys(s.enabledMethods) as Method[]).filter((m) => {
+    if (!s.enabledMethods[m]) return false;
+    if (m === "manual_transfer") return !!s.bank.accountNumber;
+    return live;
+  });
+}

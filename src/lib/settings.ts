@@ -1,18 +1,8 @@
 import { db, schema } from "@/db";
 import { eq } from "drizzle-orm";
-
-export const METHODS = ["card", "bank_transfer", "ussd", "opay", "qr", "internet_banking", "manual_transfer"] as const;
-export type Method = (typeof METHODS)[number];
-
-export const METHOD_LABELS: Record<Method, string> = {
-  card: "Debit / Credit Card (Visa, Mastercard, Verve)",
-  bank_transfer: "Bank Transfer (instant account)",
-  ussd: "USSD",
-  opay: "OPay",
-  qr: "QR Payment",
-  internet_banking: "Internet Banking",
-  manual_transfer: "Manual Transfer (upload receipt)",
-};
+import { METHODS, METHOD_LABELS, type Method } from "./methods";
+export { METHODS, METHOD_LABELS };
+export type { Method };
 
 export type Settings = {
   enabledMethods: Record<Method, boolean>;
