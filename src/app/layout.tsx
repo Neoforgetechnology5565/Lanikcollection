@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { siteUrl } from "@/lib/siteUrl";
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.APP_URL ?? "http://localhost:3000"),
+  metadataBase: new URL(siteUrl()),
   title: { default: "LANIK COLLECTIONS | Quality Fashion · Fragrance · Lifestyle", template: "%s | LANIK COLLECTIONS" },
   description: "Perfumes, boxers, singlets, polo shirts, jeans and more. Wholesale & retail. Quality deals at affordable prices.",
   openGraph: { siteName: "LANIK COLLECTIONS", type: "website" },

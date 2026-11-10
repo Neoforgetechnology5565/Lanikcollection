@@ -1,12 +1,19 @@
 import "server-only";
+import { createHash } from "node:crypto";
 import { cookies } from "next/headers";
 import { SignJWT, jwtVerify } from "jose";
 import { redirect } from "next/navigation";
 
 const COOKIE = "lanik_admin";
+// SESSION_SECRET is recommended. If it is not set we derive one from DATABASE_URL, which already contains
+// the database password and so is just as secret. (Changing either one signs everyone out.)
 const key = () => {
-  const s = process.env.SESSION_SECRET;
-  if (!s || s.length < 32) throw new Error("SESSION_SECRET must be set (32+ chars)");
+  let s = process.env.SESSION_SECRET;
+  if (s && s.length < 32) throw new Error("SESSION_SECRET must be at least 32 characters (or leave it unset)");
+  if (!s) {
+    if (!process.env.DATABASE_URL) throw new Error("Set SESSION_SECRET or DATABASE_URL");
+    s = createHash("sha256").update("lanik-session-v1:" + process.env.DATABASE_URL).digest("hex");
+  }
   return new TextEncoder().encode(s);
 };
 

@@ -5,6 +5,7 @@ import { db, schema } from "@/db";
 import { naira } from "./money";
 import { fill, getTemplates, kindForStatus, type TemplateKind } from "./emailTemplates";
 import { getSettings } from "./settings";
+import { siteUrl } from "./siteUrl";
 
 export const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 const FROM = () => process.env.MAIL_FROM ?? "LANIK COLLECTIONS <no-reply@lanikcollections.com>";
@@ -66,7 +67,7 @@ async function loadOrder(orderId: number) {
   const [o] = await db.select().from(schema.orders).where(eq(schema.orders.id, orderId));
   const items = await db.select().from(schema.orderItems).where(eq(schema.orderItems.orderId, orderId));
   const rows = items.map((i) => `<tr><td>${esc(i.name)} ×${i.qty} ${esc([i.size, i.color].filter(Boolean).join(" · "))}</td><td style="text-align:right">${naira(i.unitKobo * i.qty)}</td></tr>`).join("");
-  const link = `${process.env.APP_URL ?? ""}/order/${o.number}?k=${o.accessToken}`;
+  const link = `${siteUrl()}/order/${o.number}?k=${o.accessToken}`;
   return { o, table: `<table style="width:100%;font-size:14px">${rows}<tr><td><b>Total</b></td><td style="text-align:right"><b>${naira(o.totalKobo)}</b></td></tr></table>`, link };
 }
 
