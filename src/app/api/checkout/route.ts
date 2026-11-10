@@ -6,6 +6,7 @@ import { METHODS } from "@/lib/settings";
 import { getCustomerId } from "@/lib/session";
 import { mailOrderCreated } from "@/lib/mail";
 import { ipOf, limited } from "@/lib/ratelimit";
+import { siteUrl } from "@/lib/siteUrl";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +34,7 @@ export async function POST(req: Request) {
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Please check your details and try again.", issues: parsed.error.flatten().fieldErrors }, { status: 400 });
   const { method, ...input } = parsed.data;
-  const baseUrl = process.env.APP_URL ?? new URL(req.url).origin;
+  const baseUrl = siteUrl(req.url);
 
   let order;
   try { order = await createOrder({ ...input, customerId: await getCustomerId() }); await mailOrderCreated(order.id); }

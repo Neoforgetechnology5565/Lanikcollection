@@ -55,7 +55,8 @@ This is a Node.js + PostgreSQL app, so it needs a host that runs Node and offers
 1. **Neon** (neon.tech): create a project; copy the *pooled* connection string.
 2. **Vercel** (vercel.com): *Add New → Project* → import this GitHub repo, branch `claude/confident-dirac-h4rnzd` (or merge it to `main` and use that).
    - *Build Command* override: `npm run vercel-build`
-   - *Environment Variables*: `DATABASE_URL` (Neon), `DB_POOL_MAX=3`, `APP_URL` (https://yourdomain.com, or the vercel.app URL first), `SESSION_SECRET`, `CRON_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `FLW_MODE`, `FLW_PUBLIC_KEY`, `FLW_SECRET_KEY`, `FLW_SECRET_HASH`, `CLOUDINARY_URL`, `RESEND_API_KEY`, `MAIL_FROM`.
+   - *Environment Variables* (only 3 are required to start): `DATABASE_URL` (Neon pooled address, ending `?sslmode=require`), `ADMIN_EMAIL`, `ADMIN_PASSWORD`.
+     Optional, add later: `SESSION_SECRET` (derived from the database address if absent), `APP_URL` (your own domain once you have one; defaults to the Vercel address), `CRON_SECRET` (needed for the scheduler), `FLW_*` (payments), `CLOUDINARY_URL` (photos), `RESEND_API_KEY` + `MAIL_FROM` (email).
    - Deploy. `vercel-build` creates/updates the tables, and on the very first deploy creates demo data and your admin account (it never resets an existing admin).
 3. **Domain:** Vercel → project → Settings → Domains → add your domain and follow its DNS instructions; then set `APP_URL` to the domain and redeploy.
 4. **Webhook:** Flutterwave Dashboard → Settings → Webhooks → URL `https://yourdomain.com/api/webhooks/flutterwave`, secret hash = your `FLW_SECRET_HASH`.

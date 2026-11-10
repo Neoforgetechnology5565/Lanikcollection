@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db, schema } from "@/db";
 import { startPayment, PaymentUnavailable } from "@/lib/payments";
 import { METHODS } from "@/lib/settings";
+import { siteUrl } from "@/lib/siteUrl";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +17,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ number:
   if (!o) return NextResponse.json({ error: "Order not found" }, { status: 404 });
   if (o.status !== "AWAITING_PAYMENT") return NextResponse.json({ error: "This order is no longer awaiting payment" }, { status: 409 });
   try {
-    const r = await startPayment(o, b.data.method, process.env.APP_URL ?? new URL(req.url).origin);
+    const r = await startPayment(o, b.data.method, siteUrl(req.url));
     return NextResponse.json({ next: r.kind === "redirect" ? r.url : null });
   } catch (e) {
     const msg = e instanceof PaymentUnavailable ? e.message : "We could not start the payment. Please try another method.";

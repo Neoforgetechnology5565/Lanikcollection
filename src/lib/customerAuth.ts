@@ -2,6 +2,7 @@ import "server-only";
 import { createHash, randomBytes } from "node:crypto";
 import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
+import { siteUrl } from "./siteUrl";
 
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
 
@@ -29,4 +30,4 @@ export async function consumeToken(raw: string, kind: "verify" | "reset"): Promi
     .returning({ customerId: schema.authTokens.customerId });
   return r[0]?.customerId ?? null;
 }
-export const appUrl = () => process.env.APP_URL ?? "http://localhost:3000";
+export const appUrl = () => siteUrl();

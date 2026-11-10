@@ -3,6 +3,7 @@ import { requireAdmin } from "@/lib/session";
 import { getSettings, saveSettings, clampExpiry, METHODS, METHOD_LABELS } from "@/lib/settings";
 import { db, schema } from "@/db";
 import { flwConfig } from "@/lib/flutterwave";
+import { siteUrl } from "@/lib/siteUrl";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +29,7 @@ export default async function SettingsPage() {
   let mode = "", cfgErr = "";
   try { mode = flwConfig().mode; } catch (e) { cfgErr = e instanceof Error ? e.message : "misconfigured"; }
   const hashSet = !!process.env.FLW_SECRET_HASH;
-  const appUrl = process.env.APP_URL ?? "https://YOUR-DOMAIN";
+  const appUrl = siteUrl();
   return (
     <form action={save} className="space-y-6 max-w-3xl">
       <h1 className="font-serif text-3xl font-bold">Payment &amp; site settings</h1>
