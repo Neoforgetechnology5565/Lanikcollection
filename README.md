@@ -66,6 +66,12 @@ Notes: Vercel's free (Hobby) plan is for non-commercial use, so a shop should us
 
 **Alternative:** any VPS (Hetzner, DigitalOcean, etc.) with Node 22 + Postgres: `npm install && npm run db:push && npm run setup && npm run build && npm run start` behind Nginx/Caddy with HTTPS, plus a cron entry for `/api/cron/expire`. Local disk storage works there.
 
+## Automatic releases
+
+`.github/workflows/auto-merge.yml`: whenever work is pushed to a `claude/*` branch, GitHub runs the type-check and all tests; **only if they pass** the branch is merged into `main`, and Vercel redeploys `main` on its own. If a test fails or the merge would conflict, nothing is merged and the run shows red in the repo's **Actions** tab (main is never touched).
+
+If the merge step fails with a permissions error: repo → Settings → Actions → General → *Workflow permissions* → **Read and write permissions** → Save, then re-run. If you add branch protection to `main`, it will block this merge; allow GitHub Actions to bypass it or merge by hand.
+
 ## Photos
 
 Until real photos are added, products show gold line-art illustrations. To use real photos:

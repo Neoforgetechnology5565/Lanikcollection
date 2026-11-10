@@ -1,0 +1,68 @@
+# Automatic release: when work is pushed to a claude/* branch, run the tests; if (and only if) they pass,
+# merge the branch into main. Vercel then redeploys main on its own.
+# If the tests fail or the merge conflicts, nothing is merged and this run turns red.
+name: auto-merge
+on:
+  push:
+    branches: ["claude/**"]
+  workflow_dispatch:
+
+# One run at a time per branch, newest wins; merges into main are serialized below.
+concurrency:
+  group: auto-merge-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_PASSWORD: postgres, POSTGRES_DB: lanik_test }
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/lanik
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/lanik_test
+      SESSION_SECRET: ci-session-secret-0123456789abcdef0123456789
+      CRON_SECRET: ci-cron
+      FLW_MODE: sandbox
+      FLW_PUBLIC_KEY: FLWPUBK_TEST-ci
+      FLW_SECRET_KEY: FLWSECK_TEST-ci
+      FLW_SECRET_HASH: ci-secret-hash
+      FLW_BASE_URL: http://localhost:4010/v3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: touch .env            # the npm scripts expect the file to exist; real values come from the env above
+      - run: npx tsc --noEmit
+      - run: npm run db:push:test
+      - run: npm test
+
+  merge:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: merge-into-main        # never two merges at once
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Merge into main
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          SHA="${{ github.sha }}"
+          git fetch origin main
+          git checkout -B main origin/main
+          if git merge-base --is-ancestor "$SHA" HEAD; then echo "main already contains $SHA; nothing to do"; exit 0; fi
+          # fast-forward when possible (clean history), otherwise a normal merge commit; a conflict fails the job
+          if git merge --ff-only "$SHA" 2>/dev/null; then :; else git merge --no-ff -m "Auto-merge ${{ github.ref_name }}" "$SHA"; fi
+          git push origin main
+          echo "Merged $SHA into main"
