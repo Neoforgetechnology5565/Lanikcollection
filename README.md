@@ -46,6 +46,25 @@ I had no Flutterwave credentials, so everything above was tested against `script
 
 **Product art:** until real photos are uploaded, products show gold line-art illustrations by category.
 
+## Deploy to the web (no desktop needed)
+
+This is a Node.js + PostgreSQL app, so it needs a host that runs Node and offers Postgres. Ordinary PHP/cPanel shared hosting and WordPress-style plans **cannot** run it.
+
+**Easiest route (all in the browser):** GitHub repo → **Vercel** (the website) + **Neon** (database) + **Cloudinary** (product photos) + **Resend** (email).
+
+1. **Neon** (neon.tech): create a project; copy the *pooled* connection string.
+2. **Vercel** (vercel.com): *Add New → Project* → import this GitHub repo, branch `claude/confident-dirac-h4rnzd` (or merge it to `main` and use that).
+   - *Build Command* override: `npm run vercel-build`
+   - *Environment Variables*: `DATABASE_URL` (Neon), `DB_POOL_MAX=3`, `APP_URL` (https://yourdomain.com, or the vercel.app URL first), `SESSION_SECRET`, `CRON_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `FLW_MODE`, `FLW_PUBLIC_KEY`, `FLW_SECRET_KEY`, `FLW_SECRET_HASH`, `CLOUDINARY_URL`, `RESEND_API_KEY`, `MAIL_FROM`.
+   - Deploy. `vercel-build` creates/updates the tables, and on the very first deploy creates demo data and your admin account (it never resets an existing admin).
+3. **Domain:** Vercel → project → Settings → Domains → add your domain and follow its DNS instructions; then set `APP_URL` to the domain and redeploy.
+4. **Webhook:** Flutterwave Dashboard → Settings → Webhooks → URL `https://yourdomain.com/api/webhooks/flutterwave`, secret hash = your `FLW_SECRET_HASH`.
+5. **Scheduler (every 5 min):** Vercel's free plan only allows daily cron, so use the included GitHub Action: repo → Settings → Secrets and variables → Actions → add `SITE_URL` and `CRON_SECRET` (same value as in Vercel). It starts running automatically.
+
+Notes: Vercel's free (Hobby) plan is for non-commercial use, so a shop should use a paid plan. Receipt uploads (manual bank transfer, off by default) need S3-compatible private storage (e.g. Cloudflare R2); the file system on Vercel is read-only, so the `local` storage driver will not work there. `vercel-build` runs `drizzle-kit push --force`; it applies additive changes safely, but review any future schema change that removes columns before deploying it.
+
+**Alternative:** any VPS (Hetzner, DigitalOcean, etc.) with Node 22 + Postgres: `npm install && npm run db:push && npm run setup && npm run build && npm run start` behind Nginx/Caddy with HTTPS, plus a cron entry for `/api/cron/expire`. Local disk storage works there.
+
 ## Operations
 
 **Scheduler (every 5 minutes):** `GET /api/cron/expire` with `Authorization: Bearer $CRON_SECRET`. It expires unpaid orders, releases stock, retries queued/failed emails, and purges old rate-limit rows.

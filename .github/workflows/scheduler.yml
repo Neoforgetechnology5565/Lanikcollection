@@ -1,0 +1,15 @@
+# Free scheduler for hosts without cron (e.g. Vercel Hobby). Calls the expiry/email-retry job every 5 minutes.
+# Setup: GitHub repo -> Settings -> Secrets and variables -> Actions -> add SITE_URL (https://yourdomain.com) and CRON_SECRET.
+name: scheduler
+on:
+  schedule: [{ cron: "*/5 * * * *" }]
+  workflow_dispatch:
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call expiry job
+        env: { SITE_URL: "${{ secrets.SITE_URL }}", CRON_SECRET: "${{ secrets.CRON_SECRET }}" }
+        run: |
+          test -n "$SITE_URL" && test -n "$CRON_SECRET" || { echo "Set SITE_URL and CRON_SECRET secrets"; exit 1; }
+          curl --fail --silent --show-error --max-time 60 -H "Authorization: Bearer $CRON_SECRET" "$SITE_URL/api/cron/expire"
