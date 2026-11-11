@@ -72,6 +72,28 @@ Notes: Vercel's free (Hobby) plan is for non-commercial use, so a shop should us
 
 If the merge step fails with a permissions error: repo → Settings → Actions → General → *Workflow permissions* → **Read and write permissions** → Save, then re-run. If you add branch protection to `main`, it will block this merge; allow GitHub Actions to bypass it or merge by hand.
 
+## Admin security
+
+- **My account** (Admin → My account): change your password (signs out every other browser) and turn on **two-step login** with any authenticator app. You get 8 one-time recovery codes, shown once. Codes can't be replayed, and the secret is stored encrypted.
+- **Locked out (lost password or phone)?** In Vercel add `ADMIN_RESET_PASSWORD` (10+ characters, your new password) and, to also clear two-step login, `ADMIN_RESET_2FA=1`, then redeploy. **Remove both variables afterwards.** `ADMIN_EMAIL` must be set to the admin's email.
+
+## Photos, logo and favicon
+
+- **Products:** Admin → Products → a product → *Photos*. Add photos (you can drag/zoom each into the 4:5 shop frame, or keep the whole photo), reorder with the arrows, "Make main", remove, or paste an https link. Photos are resized in your browser before upload. Uploading needs Cloudinary or S3 (see `.env.example`); pasting links works without it.
+- **Bulk links:** `scripts/demo-images.json` + `npm run db:images`.
+- **Logo and favicon:** Admin → Website content → *Logo & favicon*. Until set, the built-in text logo and "L" icon are used.
+
+Use photos you have the right to use; shoppers should see your real products before you take real orders.
+
+## Customers and newsletter
+
+- **Customers** (Admin → Customers → a customer): edit name/phone/verified, email a reset link, sign out all devices, delete the account (orders are kept), or erase personal data from their orders (privacy requests; blocked while an order is in progress).
+- **Newsletter** (Admin → Newsletter): subscribers list + CSV, write a campaign, send yourself a test, then queue it. Every email has its own unsubscribe link (and one-click headers); people who unsubscribe are never mailed, even if they leave after you queue. Needs `RESEND_API_KEY` (or SMTP). Mail goes out in small paced batches by the 5-minute scheduler, or press "Send next batch now". Only email people who chose to subscribe.
+
+## Flutterwave diagnostics
+
+Admin → Payments → **Diagnostics**: check your keys, request a sandbox test bank-transfer account and see Flutterwave's raw answer, and see recent webhook calls and failed attempts. Use it while setting up so any mismatch can be fixed quickly.
+
 ## Photos
 
 Until real photos are added, products show gold line-art illustrations. To use real photos:
@@ -106,6 +128,6 @@ The Shop dropdown is built from categories. Each category has a **menu group** (
 Flutterwave (see above, including the refund endpoint shape), Resend, S3-compatible providers and Cloudinary have been exercised only against local stand-ins that follow their public docs. Send one real test of each before launch.
 
 ## Known gaps
-- No admin tool to edit/delete customers or send marketing email to subscribers.
-- No in-app image cropping or reordering of product images.
+- Flutterwave, Resend, Cloudinary/S3 have only been exercised against local stand-ins; test each once with real credentials.
+- Provider expiry times without a timezone are ignored (the Admin-configured expiry applies); check the format in Diagnostics after your first sandbox test.
 - Privacy / terms / shipping pages are templates: review them before launch.

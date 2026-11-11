@@ -10,9 +10,9 @@ export const metadata = { title: "Admin", robots: { index: false } };
 
 const GROUPS: [string, [string, string][]][] = [
   ["Overview", [["/admin", "Dashboard"]]],
-  ["Sales", [["/admin/orders", "Orders"], ["/admin/payments", "Payments"], ["/admin/refunds", "Refunds"], ["/admin/reports", "Reports"], ["/admin/receipts", "Receipts"], ["/admin/customers", "Customers"], ["/admin/reviews", "Reviews"]]],
+  ["Sales", [["/admin/orders", "Orders"], ["/admin/payments", "Payments"], ["/admin/refunds", "Refunds"], ["/admin/reports", "Reports"], ["/admin/receipts", "Receipts"], ["/admin/customers", "Customers"], ["/admin/reviews", "Reviews"], ["/admin/newsletter", "Newsletter"]]],
   ["Catalogue", [["/admin/products", "Products"], ["/admin/inventory", "Inventory"], ["/admin/categories", "Categories"], ["/admin/discounts", "Discounts"]]],
-  ["Store", [["/admin/shipping", "Shipping"], ["/admin/content", "Website content"], ["/admin/payments/settings", "Payment settings"], ["/admin/emails", "Emails"], ["/admin/email-templates", "Email templates"]]],
+  ["Store", [["/admin/shipping", "Shipping"], ["/admin/content", "Website content"], ["/admin/payments/settings", "Payment settings"], ["/admin/emails", "Emails"], ["/admin/account", "My account"], ["/admin/email-templates", "Email templates"]]],
 ];
 export default async function PanelLayout({ children }: { children: React.ReactNode }) {
   const a = await requireAdmin();

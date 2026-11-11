@@ -13,25 +13,31 @@ const FROM = () => process.env.MAIL_FROM ?? "LANIK COLLECTIONS <no-reply@lanikco
 /** Which delivery provider is active: Resend (HTTPS API, serverless-friendly), SMTP, or none (messages stay QUEUED). */
 export const mailProvider = () => (process.env.RESEND_API_KEY ? "resend" : process.env.SMTP_URL ? "smtp" : "none") as "resend" | "smtp" | "none";
 
-async function transmit(to: string, subject: string, html: string) {
+async function transmit(to: string, subject: string, html: string, unsubUrl?: string | null) {
   const p = mailProvider();
+  // one-click unsubscribe headers (Gmail/Yahoo expect these on marketing mail)
+  const headers = unsubUrl ? { "List-Unsubscribe": `<${unsubUrl.replace("/unsubscribe?", "/api/unsubscribe?")}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" } : undefined;
   if (p === "resend") {
     const base = process.env.RESEND_API_BASE ?? "https://api.resend.com";
-    const r = await fetch(`${base}/emails`, { method: "POST", headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify({ from: FROM(), to: [to], subject, html }), signal: AbortSignal.timeout(20_000) });
+    const r = await fetch(`${base}/emails`, { method: "POST", headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify({ from: FROM(), to: [to], subject, html, ...(headers ? { headers } : {}) }), signal: AbortSignal.timeout(20_000) });
     if (!r.ok) throw new Error(`Resend ${r.status}: ${(await r.text().catch(() => "")).slice(0, 200)}`);
   } else if (p === "smtp") {
-    await nodemailer.createTransport(process.env.SMTP_URL!).sendMail({ from: FROM(), to, subject, html });
+    await nodemailer.createTransport(process.env.SMTP_URL!).sendMail({ from: FROM(), to, subject, html, ...(headers ? { headers } : {}) });
   }
 }
 
 /** Attempt delivery of a stored email and record the outcome. Never throws. */
-export async function deliver(id: number): Promise<"SENT" | "FAILED" | "QUEUED"> {
+export async function deliver(id: number): Promise<"SENT" | "FAILED" | "QUEUED" | "SKIPPED"> {
   try {
     const [row] = await db.select().from(schema.emails).where(eq(schema.emails.id, id));
     if (!row) return "FAILED";
     if (mailProvider() === "none") return "QUEUED";
+    if (row.kind === "campaign") { // never mail someone who unsubscribed after the campaign was queued
+      const [sub] = await db.select({ u: schema.subscribers.unsubscribedAt }).from(schema.subscribers).where(eq(schema.subscribers.email, row.toAddress));
+      if (!sub || sub.u) { await db.update(schema.emails).set({ status: "SKIPPED", error: "unsubscribed" }).where(eq(schema.emails.id, id)); return "SKIPPED"; }
+    }
     try {
-      await transmit(row.toAddress, row.subject, row.html);
+      await transmit(row.toAddress, row.subject, row.html, row.unsubUrl);
       await db.update(schema.emails).set({ status: "SENT", sentAt: new Date(), error: null, attempts: sql`${schema.emails.attempts} + 1` }).where(eq(schema.emails.id, id));
       return "SENT";
     } catch (e) {
@@ -50,9 +56,12 @@ export async function sendMail(to: string, subject: string, html: string, kind =
 /** For the scheduler: retry messages that are stuck QUEUED (provider was missing) or FAILED, up to 5 attempts within 3 days. */
 export async function retryPendingEmails(limit = 25) {
   if (mailProvider() === "none") return { retried: 0, sent: 0 };
-  const rows = await db.select({ id: schema.emails.id }).from(schema.emails)
-    .where(and(inArray(schema.emails.status, ["QUEUED", "FAILED"]), lt(schema.emails.attempts, 5), gt(schema.emails.createdAt, sql`now() - interval '3 days'`))).limit(limit);
-  let sent = 0; for (const r of rows) if ((await deliver(r.id)) === "SENT") sent++;
+  // order mail first, marketing last; marketing is paced (~2/second) to respect provider rate limits
+  const rows = await db.select({ id: schema.emails.id, kind: schema.emails.kind }).from(schema.emails)
+    .where(and(inArray(schema.emails.status, ["QUEUED", "FAILED"]), lt(schema.emails.attempts, 5), gt(schema.emails.createdAt, sql`now() - interval '14 days'`)))
+    .orderBy(sql`(${schema.emails.kind} = 'campaign')`, schema.emails.id).limit(limit);
+  let sent = 0;
+  for (const r of rows) { if ((await deliver(r.id)) === "SENT") sent++; if (r.kind === "campaign") await new Promise((res) => setTimeout(res, 550)); }
   return { retried: rows.length, sent };
 }
 /** Admin "Resend": works on any stored message, including ones already SENT. */

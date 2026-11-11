@@ -3,7 +3,7 @@ import { desc, eq } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { requireAdmin } from "@/lib/session";
 import { naira, toKobo } from "@/lib/money";
-import { saveProductImage } from "@/lib/uploads";
+import { ProductImages } from "@/components/admin/ProductImages";
 import { syncVariants } from "@/lib/catalog";
 import { recomputeStock } from "@/lib/catalog";
 
@@ -19,12 +19,10 @@ async function upsert(fd: FormData) {
   const name = String(fd.get("name") ?? "").trim(); const price = kobo(fd.get("price"));
   if (!name || !price) return;
   const id = Number(fd.get("id")) || null;
-  const uploaded: string[] = [];
-  for (const f of fd.getAll("files")) if (f instanceof File && f.size) { const u = await saveProductImage(f); if (u) uploaded.push(u); }
   const v = {
     name, description: String(fd.get("description") ?? ""), categoryId: Number(fd.get("categoryId")) || null,
     priceKobo: price, saleKobo: kobo(fd.get("sale")), wholesaleKobo: kobo(fd.get("wholesale")), wholesaleMin: Number(fd.get("wholesaleMin")) || null,
-    images: [...httpUrls(list(fd.get("images"))), ...uploaded], sizes: list(fd.get("sizes")), colors: list(fd.get("colors")),
+    images: httpUrls(list(fd.get("images"))), sizes: list(fd.get("sizes")), colors: list(fd.get("colors")),
     featured: fd.get("featured") === "on", active: fd.get("active") === "on",
   };
   const initial = Math.max(0, Math.floor(Number(fd.get("stock")) || 0));
@@ -68,8 +66,7 @@ function Form({ p, cats }: { p?: P; cats: { id: number; name: string }[] }) {
       <div><label className="label">Wholesale min qty</label><input name="wholesaleMin" type="number" min="2" defaultValue={p?.wholesaleMin ?? ""} className="input" /></div>
       <div><label className="label">Sizes (comma-separated)</label><input name="sizes" defaultValue={p?.sizes.join(", ")} className="input" /></div>
       <div><label className="label">Colours</label><input name="colors" defaultValue={p?.colors.join(", ")} className="input" /></div>
-      <div className="sm:col-span-2"><label className="label">Images (one URL per line; delete a line to remove)</label><textarea name="images" rows={2} defaultValue={p?.images.join("\n")} className="input" /></div>
-      <div><label className="label">Upload images (JPG/PNG/WEBP, 5MB each)</label><input name="files" type="file" multiple accept="image/jpeg,image/png,image/webp" className="input" /></div>
+      <ProductImages key={p?.images.join("|") ?? "new"} initial={p?.images ?? []} />
       <div className="sm:col-span-3"><label className="label">Description</label><textarea name="description" rows={2} defaultValue={p?.description} className="input" /></div>
       <label className="text-sm flex gap-2 items-center"><input type="checkbox" name="featured" defaultChecked={p?.featured} className="accent-[#D99A24]" />Featured</label>
       <label className="text-sm flex gap-2 items-center"><input type="checkbox" name="active" defaultChecked={p?.active ?? true} className="accent-[#D99A24]" />Listed</label>

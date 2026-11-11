@@ -20,7 +20,7 @@ const icons = {
 const Badge = ({ n }: { n: number }) => n > 0 ? <span className="absolute -top-1.5 -right-2 min-w-[18px] h-[18px] px-1 rounded-full bg-gold text-ink text-[10px] font-bold flex items-center justify-center">{n}</span> : null;
 const link = "text-[12px] font-semibold tracking-[.18em] uppercase hover:text-bronze transition relative after:absolute after:left-0 after:-bottom-1 after:h-px after:w-0 hover:after:w-full after:bg-gold after:transition-all";
 
-export function Header({ groups, hasOffers, signedIn, announcement }: { groups: MenuGroup[]; hasOffers: boolean; signedIn: boolean; announcement: string }) {
+export function Header({ groups, hasOffers, signedIn, announcement, logoUrl }: { groups: MenuGroup[]; hasOffers: boolean; signedIn: boolean; announcement: string; logoUrl?: string }) {
   const router = useRouter(); const path = usePathname();
   const cartN = useCart().reduce((a, i) => a + i.qty, 0);
   const wishN = useWishlist().length;
@@ -81,7 +81,7 @@ export function Header({ groups, hasOffers, signedIn, announcement }: { groups: 
               {top.map(([l, h]) => <Link key={h} href={h} className={link}>{l}</Link>)}
             </nav>
           </div>
-          <Link href="/" aria-label="LANIK COLLECTIONS home" className="justify-self-center"><Logo size="md" /></Link>
+          <Link href="/" aria-label="LANIK COLLECTIONS home" className="justify-self-center"><Logo size="md" src={logoUrl} /></Link>
           <div className="flex items-center justify-end gap-4">
             <Link href="/wholesale" className="hidden lg:inline-flex text-[11px] font-bold tracking-[.18em] uppercase border border-gold text-bronze px-3 py-1.5 hover:bg-ink hover:text-gold-light transition">Wholesale</Link>
             <button aria-label="Search" onClick={() => setSearching(true)} className="hover:text-bronze">{icons.search}</button>
