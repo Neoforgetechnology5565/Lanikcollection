@@ -70,6 +70,19 @@ export async function createHostedPayment(p: {
   return r.data.link;
 }
 
+/**
+ * Provider expiry -> Date, but only when it can be trusted. Accepts ISO-8601 WITH a timezone (Z or +hh:mm).
+ * Strings without a timezone (e.g. "2026-01-31 10:46:53 AM") are ambiguous (UTC vs Nigerian time), so they are ignored
+ * and the expiry configured in Admin applies instead. Also rejects times in the past or more than 6 hours away.
+ */
+export function parseProviderExpiry(v: unknown, now = Date.now()): Date | null {
+  if (typeof v !== "string") return null;
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})$/i.test(v.trim())) return null;
+  const d = new Date(v.trim()); const t = d.getTime();
+  return Number.isFinite(t) && t > now - 5 * 60_000 && t < now + 6 * 3600_000 ? d : null;
+}
+const pick = (o: any, ...keys: string[]) => { for (const k of keys) if (o?.[k] != null && o[k] !== "") return String(o[k]); return null; };
+
 /** Dynamic, single-use virtual account for one order. */
 export async function createVirtualAccount(p: {
   txRef: string; amountNaira: number; customer: Customer; narration: string;
@@ -87,17 +100,18 @@ export async function createVirtualAccount(p: {
       narration: p.narration,
     }),
   });
-  const a = r?.meta?.authorization;
-  if (!a?.transfer_account || !a?.transfer_bank) {
-    throw new FlwError("Flutterwave did not return virtual account details", undefined, r);
-  }
+  // Flutterwave has used slightly different field names across API versions; accept the known variants.
+  const a = r?.meta?.authorization ?? r?.data?.meta?.authorization ?? r?.data ?? {};
+  const account = pick(a, "transfer_account", "account_number", "accountNumber");
+  const bank = pick(a, "transfer_bank", "bank_name", "bankName", "bank");
+  if (!account || !bank) throw new FlwError("Flutterwave did not return virtual account details", undefined, r);
   return {
-    bank: String(a.transfer_bank),
-    accountNumber: String(a.transfer_account),
-    accountName: a.transfer_account_name ? String(a.transfer_account_name) : null,
-    note: a.transfer_note ? String(a.transfer_note) : null,
+    bank, accountNumber: account,
+    accountName: pick(a, "transfer_account_name", "account_name", "accountName"),
+    note: pick(a, "transfer_note", "note"),
     amountNaira: a.transfer_amount != null ? Number(a.transfer_amount) : p.amountNaira,
-    expiresAt: a.account_expiration ? new Date(a.account_expiration) : null,
+    expiresAt: parseProviderExpiry(a.account_expiration ?? a.expires_at ?? a.expiry_date),
+    rawExpiry: pick(a, "account_expiration", "expires_at", "expiry_date"),
     raw: r,
   };
 }
@@ -130,4 +144,12 @@ export async function refundTransaction(providerTxId: string, amountNaira: numbe
   const r = await flw<any>(`/transactions/${encodeURIComponent(providerTxId)}/refund`, { method: "POST", body: JSON.stringify({ amount: amountNaira }) });
   const d = r?.data ?? {};
   return { ref: d.id != null ? String(d.id) : null, status: String(d.status ?? "pending").toLowerCase(), raw: r };
+}
+
+/** For the admin diagnostics page only: returns status + body without throwing. */
+export async function flwRaw(path: string, init: RequestInit = {}): Promise<{ status: number; body: unknown }> {
+  const { secret, base } = flwConfig();
+  const res = await fetch(base + path, { ...init, headers: { Authorization: `Bearer ${secret}`, "Content-Type": "application/json", ...(init.headers ?? {}) }, signal: AbortSignal.timeout(20_000), cache: "no-store" });
+  const text = await res.text(); let body: unknown = text; try { body = JSON.parse(text); } catch { /* keep text */ }
+  return { status: res.status, body };
 }

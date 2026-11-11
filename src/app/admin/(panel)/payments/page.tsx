@@ -25,7 +25,7 @@ export default async function Payments({ searchParams }: { searchParams: Promise
     <div className="space-y-6">
       <div className="flex items-center gap-3 flex-wrap"><h1 className="font-serif text-3xl font-bold">Payments</h1>
         <span className={`text-xs font-bold px-2 py-1 ${mode === "live" ? "bg-green-100 text-green-900" : "bg-amber-100 text-amber-900"}`}>Flutterwave: {mode.toUpperCase()}</span>
-        <Link className="btn btn-line !py-1.5 ml-auto" href="/api/admin/payments-csv">Export CSV</Link></div>
+        <Link className="btn btn-line !py-1.5 ml-auto" href="/admin/payments/diagnostics">Diagnostics</Link><Link className="btn btn-line !py-1.5" href="/api/admin/payments-csv">Export CSV</Link></div>
 
       <section className="card p-4"><h2 className="font-semibold mb-2">Report: verified revenue by method</h2>
         {ok.length === 0 ? <p className="text-sm text-ink/60">No successful payments yet.</p> :

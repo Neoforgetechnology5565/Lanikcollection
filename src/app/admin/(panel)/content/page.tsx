@@ -1,6 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/session";
-import { getContent, saveContent, type Content } from "@/lib/content";
+import { getContent, saveContent, safeImg, type Content } from "@/lib/content";
+import { ImageUploadField } from "@/components/admin/ImageUploadField";
 
 export const dynamic = "force-dynamic";
 const t = (fd: FormData, k: string, n = 200) => String(fd.get(k) ?? "").trim().slice(0, n);
@@ -13,6 +14,7 @@ async function save(fd: FormData) {
     promo: { active: fd.get("pactive") === "on", title: t(fd, "ptitle", 120), body: t(fd, "pbody", 240), cta: t(fd, "pcta", 30), href: t(fd, "phref") || "/shop" },
     contact: { email: t(fd, "email"), phone: t(fd, "phone", 30), address: t(fd, "address", 200), hours: t(fd, "hours", 100) },
     socials: { instagram: t(fd, "instagram"), facebook: t(fd, "facebook"), tiktok: t(fd, "tiktok"), x: t(fd, "x") },
+    brand: { logoUrl: safeImg(t(fd, "logoUrl", 500)), logoDarkUrl: safeImg(t(fd, "logoDarkUrl", 500)), faviconUrl: safeImg(t(fd, "faviconUrl", 500)) },
   };
   if (!c.banners.length) c.banners = cur.banners;
   await saveContent(c); revalidatePath("/", "layout");
@@ -24,6 +26,12 @@ export default async function ContentPage() {
     <form action={save} className="space-y-6 max-w-4xl">
       <h1 className="font-serif text-3xl font-bold">Website content</h1>
       <p className="text-sm text-ink/70">Edit the homepage, announcement bar, contact details and social links. No code needed.</p>
+      <section className="card p-5 space-y-5"><h2 className="font-semibold">Logo &amp; favicon</h2>
+        <p className="text-xs text-ink/60">Upload your real logo. Until you do, the built-in text logo is used. Uploads need Cloudinary or S3 set up; otherwise paste an image link.</p>
+        <ImageUploadField name="logoUrl" label="Logo (on light backgrounds, e.g. the header)" initial={c.brand.logoUrl} hint="PNG with a transparent background works best." />
+        <ImageUploadField name="logoDarkUrl" label="Logo for dark backgrounds (footer). Optional" initial={c.brand.logoDarkUrl} dark hint="If empty, the main logo is used." />
+        <ImageUploadField name="faviconUrl" label="Favicon (browser tab icon)" initial={c.brand.faviconUrl} maxSide={256} hint="Square image, e.g. your L monogram. Shown in the browser tab." />
+      </section>
       <section className="card p-5 space-y-3"><h2 className="font-semibold">Announcement bar</h2><F n="announcement" l="Text" v={c.announcement} /></section>
       <section className="card p-5 space-y-5"><h2 className="font-semibold">Homepage banners (rotating hero)</h2>
         {c.banners.map((b, i) => <div key={i} className="grid sm:grid-cols-2 gap-3 border-t border-champagne pt-4 first:border-0 first:pt-0"><F n={`b${i}t`} l={`Banner ${i + 1} headline`} v={b.title} /><F n={`b${i}s`} l="Sub-headline" v={b.subtitle} /><F n={`b${i}c`} l="Button text" v={b.cta} /><F n={`b${i}h`} l="Button link (e.g. /shop?cat=jeans)" v={b.href} /></div>)}</section>

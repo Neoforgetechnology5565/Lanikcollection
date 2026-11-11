@@ -139,6 +139,11 @@ export const admins = pgTable("admins", {
   id: serial("id").primaryKey(),
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
+  tokenVersion: integer("token_version").notNull().default(0), // bump to sign the admin out everywhere
+  totpSecretEnc: text("totp_secret_enc"),                      // AES-GCM encrypted base32 secret
+  totpEnabled: boolean("totp_enabled").notNull().default(false),
+  totpLastStep: integer("totp_last_step").notNull().default(0), // blocks re-use of a code
+  recoveryHashes: text("recovery_hashes").array().notNull().default([]),
 });
 
 export const discountCodes = pgTable("discount_codes", {
@@ -194,6 +199,19 @@ export const shippingZones = pgTable("shipping_zones", {
 
 export const subscribers = pgTable("subscribers", {
   email: text("email").primaryKey(),
+  token: text("token").unique(),                       // for the unsubscribe link
+  unsubscribedAt: timestamp("unsubscribed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const campaigns = pgTable("campaigns", {
+  id: serial("id").primaryKey(),
+  subject: text("subject").notNull(),
+  body: text("body").notNull(),
+  ctaLabel: text("cta_label"),
+  ctaUrl: text("cta_url"),
+  recipients: integer("recipients").notNull().default(0),
+  createdBy: text("created_by").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -204,6 +222,8 @@ export const emails = pgTable("emails", {
   html: text("html").notNull(),
   status: text("status").notNull().default("QUEUED"), // QUEUED (no provider) | SENT | FAILED
   kind: text("kind").notNull().default("misc"),
+  campaignId: integer("campaign_id"),
+  unsubUrl: text("unsub_url"),
   attempts: integer("attempts").notNull().default(0),
   sentAt: timestamp("sent_at", { withTimezone: true }),
   error: text("error"),

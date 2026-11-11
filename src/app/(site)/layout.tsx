@@ -22,13 +22,13 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
   return (
     <>
         <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-gold focus:p-3">Skip to content</a>
-        <Header groups={buildGroups(cats)} hasOffers={(offers[0]?.n ?? 0) > 0} signedIn={!!cid} announcement={c.announcement} />
+        <Header logoUrl={c.brand.logoUrl} groups={buildGroups(cats)} hasOffers={(offers[0]?.n ?? 0) > 0} signedIn={!!cid} announcement={c.announcement} />
         <WishlistSync signedIn={!!cid} />
         <main id="main" className="flex-1">{children}</main>
         <footer className="bg-ink text-champagne mt-24 grain">
           <div className="rule" />
           <div className="mx-auto max-w-7xl px-4 py-16 grid gap-12 md:grid-cols-12">
-            <div className="md:col-span-4 space-y-5"><Logo dark /><p className="text-sm text-champagne/70 max-w-xs">Quality fashion, fragrance and lifestyle essentials. Wholesale and retail, at prices that make sense.</p>
+            <div className="md:col-span-4 space-y-5"><Logo dark src={c.brand.logoDarkUrl || c.brand.logoUrl} /><p className="text-sm text-champagne/70 max-w-xs">Quality fashion, fragrance and lifestyle essentials. Wholesale and retail, at prices that make sense.</p>
               <div><p className="eyebrow !text-gold-light mb-3">Join the list</p><Newsletter dark /></div></div>
             <div className="md:col-span-2 text-sm space-y-2.5"><p className="eyebrow !text-gold-light">Shop</p>
               {cats.map((x) => <Link key={x.id} className="block text-champagne/75 hover:text-gold-light" href={`/shop?cat=${x.slug}`}>{x.name}</Link>)}</div>

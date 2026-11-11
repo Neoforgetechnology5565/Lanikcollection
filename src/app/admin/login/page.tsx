@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { db, schema } from "@/db";
-import { createAdminSession, getAdmin } from "@/lib/session";
+import { createAdminSession, createPending2fa, getAdmin } from "@/lib/session";
 import { Logo } from "@/components/Logo";
 import { clientIp, hit, peek, reset } from "@/lib/ratelimit";
 
@@ -11,7 +11,7 @@ const WIN = 15 * 60;
 
 async function login(formData: FormData) {
   "use server";
-  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const email = String(formData.get("email") ?? "").trim().toLowerCase().slice(0, 200);
   const password = String(formData.get("password") ?? "");
   const ip = await clientIp(); const ek = `admin:email:${email}`, ik = `admin:ip:${ip}`;
   if ((await peek(ek, WIN)) >= 5 || (await peek(ik, WIN)) >= 20) redirect("/admin/login?e=locked");
@@ -20,7 +20,8 @@ async function login(formData: FormData) {
   const ok = await bcrypt.compare(password, a?.passwordHash ?? "$2a$10$invalidinvalidinvalidinvalidinvalidinvalidinvalidinvalidi");
   if (!a || !ok) { await Promise.all([hit(ek, WIN), hit(ik, WIN)]); redirect("/admin/login?e=1"); }
   await reset(ek);
-  await createAdminSession(a.email);
+  if (a.totpEnabled) { await createPending2fa(a.email, a.tokenVersion); redirect("/admin/login/verify"); }
+  await createAdminSession(a.email, a.tokenVersion);
   redirect("/admin");
 }
 

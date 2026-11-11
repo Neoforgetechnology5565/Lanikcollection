@@ -26,6 +26,7 @@ export function startMockFlutterwave(port = 4010) {
         transfer_amount: body.amount, transfer_note: "Please make a bank transfer to Lanik Collections",
         account_expiration: new Date(Date.now() + state.vaMinutes * 60_000).toISOString(), mode: "banktransfer" } } });
     }
+    if (url.pathname === "/v3/banks/NG") return send(200, { status: "success", data: [{ id: 1, code: "044", name: "Access Bank" }, { id: 2, code: "058", name: "GTBank" }] });
     const rf = url.pathname.match(/^\/v3\/transactions\/([^/]+)\/refund$/);
     if (rf && req.method === "POST") {
       if (state.refundFail) return send(400, { status: "error", message: "Refund not allowed for this transaction" });
